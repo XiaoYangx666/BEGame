@@ -2,6 +2,7 @@ import { serve } from "@hono/node-server";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
+import { ArchiveStore, Archiver, type ArchiveLiveGroup, type ArchiveLiveSession, type ArchiveSource } from "./archive";
 import { createApp, PUBLIC_DIR } from "./app";
 import { ConnectBridge } from "./connect";
 import { IngestStore } from "./ingest";
@@ -27,9 +28,10 @@ if (!parsed.ok) {
 }
 
 function start(options: ServerOptions) {
-    const ingestDir =
+    const dataDir =
         options.ingestDir ??
         fileURLToPath(new URL("../data", import.meta.url));
+    const ingestDir = dataDir;
 
     const bridge = options.connect
         ? new ConnectBridge(options.connectPort, options.host, options.connectTargets)
@@ -38,6 +40,18 @@ function start(options: ServerOptions) {
     const net = options.net
         ? new TraceNetBridge(options.netPort, options.host, options.netToken)
         : undefined;
+
+    // The archive mirrors finished sessions off the live bridges, so they
+    // survive a disconnect or a game restart. It shares the ingest data root
+    // but lives in its own subdirectory, leaving `IngestStore`'s listing alone.
+    const archiveDir = options.archiveDir ?? join(dataDir, "archive");
+    const archive = options.archive ? new ArchiveStore(archiveDir) : undefined;
+    const archiver = archive
+        ? new Archiver(archive, archiveSources(bridge, net), {
+              onError: (error) => console.error("[observatory] 归档失败:", error),
+          })
+        : undefined;
+    archiver?.start();
 
     if (!options.http) {
         console.log("HTTP 工作台未启用（--no-http）。");
@@ -50,7 +64,7 @@ function start(options: ServerOptions) {
 
     const server = serve(
         {
-            fetch: createApp(bridge, ingest, net).fetch,
+            fetch: createApp(bridge, ingest, net, archive).fetch,
             port: options.port,
             hostname: options.host,
         },
@@ -76,6 +90,7 @@ function start(options: ServerOptions) {
             if (ingest) {
                 console.log(`BDS ingest: POST http://${options.host}:${info.port}/api/ingest（目录 ${ingestDir}）`);
             }
+            if (archive) console.log(`Trace 归档: ${archiveDir}`);
             console.log("Ctrl+C 停止");
         }
     );
@@ -90,4 +105,62 @@ function start(options: ServerOptions) {
         }
         process.exitCode = 1;
     });
+}
+
+/**
+ * Adapts the live bridges to the archive's structural `ArchiveSource`. Kept in
+ * the server entry so `archive.ts` stays free of bridge dependencies and easy
+ * to unit test with fakes.
+ */
+function archiveSources(
+    bridge: ConnectBridge | undefined,
+    net: TraceNetBridge | undefined
+): ArchiveSource[] {
+    const sources: ArchiveSource[] = [];
+    if (bridge) {
+        sources.push({
+            kind: "connect",
+            async list(): Promise<readonly ArchiveLiveGroup[]> {
+                const { sessions } = await bridge.list();
+                const groups = new Map<
+                    string,
+                    { pack: string; packName?: string; sessions: ArchiveLiveSession[] }
+                >();
+                for (const target of bridge.configuredTargets) {
+                    groups.set(target.namespace, {
+                        pack: target.namespace,
+                        packName: target.packName,
+                        sessions: [],
+                    });
+                }
+                for (const session of sessions) {
+                    let group = groups.get(session.pack);
+                    if (!group) {
+                        group = { pack: session.pack, packName: session.packName, sessions: [] };
+                        groups.set(session.pack, group);
+                    }
+                    group.sessions.push(session);
+                }
+                return [...groups.values()];
+            },
+            download: (pack, sessionId) => bridge.download(sessionId, pack),
+            available: () => bridge.connected,
+        });
+    }
+    if (net) {
+        sources.push({
+            kind: "net",
+            async list(): Promise<readonly ArchiveLiveGroup[]> {
+                const all = await net.listAll();
+                return all.map((entry) => ({
+                    pack: entry.source,
+                    packName: entry.packName,
+                    sessions: entry.sessions,
+                }));
+            },
+            download: (pack, sessionId) => net.download(pack, sessionId),
+            available: () => net.connected,
+        });
+    }
+    return sources;
 }

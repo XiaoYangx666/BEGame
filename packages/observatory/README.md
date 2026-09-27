@@ -74,7 +74,8 @@ bgobs --connect --pack ddz
         "targets": { "ddz": {} }
     },
     "net": { "port": 18790, "token": "" },
-    "ingest": { "dir": "./data", "token": "" }
+    "ingest": { "dir": "./data", "token": "" },
+    "archive": { "dir": "./data/archive" }
 }
 ```
 
@@ -97,6 +98,8 @@ bgobs --connect --pack ddz
 | net token | `--net-token` | `BEGAME_NET_TOKEN` | — |
 | ingest 目录 | `--ingest-dir` | `BEGAME_INGEST_DIR` | 包内 `data` |
 | ingest token | `--ingest-token` | `BEGAME_INGEST_TOKEN` | — |
+| 归档目录 | `--archive-dir` | `BEGAME_ARCHIVE_DIR` | 包内 `data/archive` |
+| 关闭归档 | `--no-archive` | — | 归档默认开启 |
 
 命令行传了 `--pack` 就**替换**（而不是追加）配置文件里的列表。
 
@@ -109,6 +112,19 @@ bgobs --connect --pack ddz
 - `--ingest` —— HTTP 上传 sink（`POST /api/ingest`）。
 
 三者中 HTTP 工作台默认开启，可用 `--no-http` 关闭。
+
+## 断连后的持久化（本地归档）
+
+`/connect` 与 `--net` 都是**实时查询代理**：会话本体在游戏侧的历史存储里，游戏一断连，
+工作台列出来的记录就会消失。Observatory 默认会把它们的**已完成会话**拉取到本地磁盘
+（`data/archive/<kind>/<pack>/<sessionId>.begtrace`），因此断连、甚至游戏重启后，工作台
+仍会把这些会话列成「未连接」的数据源并标注「已归档」，可继续查看、导出，`/api/session/:id`
+也优先从归档读取。
+
+- 只归档 `status !== "running"` 的会话；进行中的会话继续走实时桥。
+- 每 3 秒轮询一次、每次最多下载 5 局，避免 `/connect` 的单条命令队列被回填拖住。
+- 显式删除（工作台 `×`）或「清空已完成」会连同归档一起删掉，否则记录会立刻「复活」。
+- 用 `--no-archive` 关闭；`--archive-dir <path>` / `BEGAME_ARCHIVE_DIR` 换目录。
 
 ## 从源码构建
 

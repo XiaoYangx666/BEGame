@@ -399,6 +399,8 @@ Then open `http://127.0.0.1:8787` (override with `--port <n>` or `PORT=xxxx`). T
 
 `--connect` 与 `--net` 同时给出会直接报错退出；`--no-http` 可以只跑桥不跑工作台。
 
+两种游戏桥都是**实时查询代理**，会话本体在游戏侧；游戏断连后工作台就看不到它们。Observatory 默认开启**本地归档**（`--no-archive` 关闭，`--archive-dir` / `BEGAME_ARCHIVE_DIR` 换目录）：它每 3 秒把已完成的会话拉取到 `data/archive/`，断连后仍作为「未连接 · 已归档」的数据源列出并可从磁盘读取/导出。
+
 ### 视图（通用）
 
 工作台不针对任何具体游戏：它只认识 BEGame 自己的内置事件族，以及「自定义事件把具体类型放在 `payload.type`」这一通用约定。因此同一套视图适用于任何基于 BEGame 的包。

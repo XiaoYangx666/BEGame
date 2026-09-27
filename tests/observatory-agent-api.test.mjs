@@ -18,6 +18,7 @@ test("agent API exposes capabilities and a structured analysis", async () => {
         connectTargets: 0,
         net: false,
         ingest: false,
+        archive: false,
     });
 
     // Nothing is opened by default, so there are no live sources.

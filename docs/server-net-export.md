@@ -121,6 +121,20 @@ npm run observatory:connect    # 额外开启 /connect 桥（与 --net 互斥）
 
 `--connect` 与 `--net` 不能同时开启；同时给出会报错退出。`--no-http` 可以只跑桥。
 
+### 本地归档（断连后仍在）
+
+net / connect 桥只是实时代理，会话存在游戏侧；游戏一断连，工作台就列不出它们。
+Observatory 默认会把这两个桥的**已完成会话**镜像到本地
+（`data/archive/<kind>/<pack>/<sessionId>.begtrace`），断连后仍以「未连接」数据源列出、
+标注「已归档」，可查看与导出。行为要点：
+
+- 只归档 `status !== "running"` 的会话，进行中的继续走实时桥；
+- 每 3 秒轮询、每次最多 5 局，避免拖慢 `/connect` 的单条命令队列；
+- `DELETE /api/net/session/:id` 与 `POST /api/net/clear` 会连同归档一起删除；
+- `GET /api/session/:id`、`/api/net/session/:id` 以及两个导出接口都优先读归档，
+  因此桥离线时也能导出；
+- `--no-archive` 关闭；`--archive-dir` / `BEGAME_ARCHIVE_DIR` 指定目录。
+
 对应的环境变量只提供取值，不会自行开启监听：
 
 - `BEGAME_NET_PORT`：trace net 端口，默认 `18790`。
@@ -128,6 +142,7 @@ npm run observatory:connect    # 额外开启 /connect 桥（与 --net 互斥）
 - `BEGAME_NET_TOKEN`：trace net 握手 token；回退 `BEGAME_INGEST_TOKEN`；留空不校验。
 - `BEGAME_INGEST_TOKEN` / `BEGAME_INGEST_DIR`：HTTP ingest 的 token 与落盘目录
   （默认 `packages/observatory/data`）。
+- `BEGAME_ARCHIVE_DIR`：本地归档目录（默认 `packages/observatory/data/archive`）。
 - `PORT` / `HOST`：HTTP 服务地址，默认 `127.0.0.1:8787`。
 
 工作台 UI 会根据实际启用的能力显示数据源；未开启的桥不会出现，也不会占用端口。

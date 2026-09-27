@@ -3,7 +3,8 @@ import { serveStatic } from "@hono/node-server/serve-static";
 import { fileURLToPath } from "node:url";
 import { decodeTracePayload } from "../src/decode.mjs";
 import type { DecodeResponse } from "../src/types";
-import type { ConnectBridge } from "./connect";
+import type { ArchiveRecord, ArchiveStore } from "./archive";
+import type { ConnectBridge, LiveSummary as ConnectLiveSession } from "./connect";
 import type { IngestStore } from "./ingest";
 import type { TraceNetBridge } from "./net";
 import { zipFiles } from "./zip";
@@ -33,11 +34,12 @@ interface AppDeps {
     bridge?: ConnectBridge;
     ingest?: IngestStore;
     net?: TraceNetBridge;
+    archive?: ArchiveStore;
 }
 
-export function createApp(bridge?: ConnectBridge, ingest?: IngestStore, net?: TraceNetBridge) {
+export function createApp(bridge?: ConnectBridge, ingest?: IngestStore, net?: TraceNetBridge, archive?: ArchiveStore) {
     const app = new Hono();
-    const deps: AppDeps = { bridge, ingest, net };
+    const deps: AppDeps = { bridge, ingest, net, archive };
 
     app.get("/api/health", (c) =>
         c.json({
@@ -91,26 +93,38 @@ export function createApp(bridge?: ConnectBridge, ingest?: IngestStore, net?: Tr
     /** All sessions from every connected source, flattened and tagged. */
     app.get("/api/sessions", async (c) => {
         const sources: unknown[] = [];
+        // Archived sessions are surfaced even when their bridge is off: that is
+        // the whole point of persisting them. A live source of the same pack is
+        // listed once, with its finished sessions merged in.
+        const archived = archive?.list() ?? [];
+        const seen = new Set<string>();
 
         if (bridge) {
+            let live: ConnectLiveSession[] = [];
+            let errors: { pack: string; error: string }[] = [];
+            let listError: string | undefined;
             try {
-                const { sessions, errors } = await bridge.list();
-                // Mirror the net source: one entry per pack, so the workbench
-                // can group sessions by pack instead of showing one flat list.
-                for (const target of bridge.configuredTargets) {
-                    const failure = errors.find((item) => item.pack === target.namespace);
-                    sources.push({
-                        id: `connect:${target.namespace}`,
-                        kind: "connect",
-                        connected: bridge.connected,
-                        pack: target.namespace,
-                        packName: target.packName ?? target.namespace,
-                        sessions: sessions.filter((session) => session.pack === target.namespace),
-                        error: failure?.error,
-                    });
-                }
+                ({ sessions: live, errors } = await bridge.list());
             } catch (error) {
-                sources.push({ id: "connect", kind: "connect", connected: bridge.connected, sessions: [], error: (error as Error).message });
+                listError = (error as Error).message;
+            }
+            // Mirror the net source: one entry per pack, so the workbench can
+            // group sessions by pack instead of showing one flat list.
+            for (const target of bridge.configuredTargets) {
+                const failure = errors.find((item) => item.pack === target.namespace);
+                const list = live.filter((session) => session.pack === target.namespace);
+                sources.push({
+                    id: `connect:${target.namespace}`,
+                    kind: "connect",
+                    connected: bridge.connected,
+                    pack: target.namespace,
+                    packName: target.packName ?? target.namespace,
+                    sessions: mergeArchived(list, archived, "connect", target.namespace),
+                    // A connection-level failure is already conveyed by the
+                    // disconnected dot; only per-pack failures add detail.
+                    error: failure?.error ?? (bridge.connected ? listError : undefined),
+                });
+                seen.add(`connect:${target.namespace}`);
             }
         }
         if (net) {
@@ -124,9 +138,10 @@ export function createApp(bridge?: ConnectBridge, ingest?: IngestStore, net?: Tr
                         pack: entry.source,
                         packName: entry.packName,
                         store: entry.store,
-                        sessions: entry.sessions,
+                        sessions: mergeArchived(entry.sessions, archived, "net", entry.source),
                         error: entry.error,
                     });
+                    seen.add(`net:${entry.source}`);
                 }
             } catch (error) {
                 sources.push({ id: "net", kind: "net", connected: net.connected, sessions: [], error: (error as Error).message });
@@ -134,6 +149,18 @@ export function createApp(bridge?: ConnectBridge, ingest?: IngestStore, net?: Tr
         }
         if (ingest) {
             sources.push({ id: "ingest", kind: "ingest", connected: true, sessions: ingest.list() });
+        }
+        for (const source of archiveSources(archived)) {
+            const id = `${source.kind}:${source.pack}`;
+            if (seen.has(id)) continue;
+            sources.push({
+                id,
+                kind: source.kind,
+                connected: false,
+                pack: source.pack,
+                packName: source.packName ?? source.pack,
+                sessions: mergeArchived([], archived, source.kind, source.pack),
+            });
         }
 
         return c.json({ capabilities: capabilities(deps), sources });
@@ -198,7 +225,7 @@ export function createApp(bridge?: ConnectBridge, ingest?: IngestStore, net?: Tr
         } catch (error) { return c.json({ error: (error as Error).message }, 422); }
     });
     app.post("/api/connect/export", async (c) => {
-        if (!bridge) return c.json({ error: "连接服务未启动" }, 503);
+        if (!bridge && !archive) return c.json({ error: "连接服务未启动" }, 503);
         try {
             const body = await c.req.json() as { ids?: unknown; pack?: unknown };
             const ids = body.ids;
@@ -209,7 +236,10 @@ export function createApp(bridge?: ConnectBridge, ingest?: IngestStore, net?: Tr
             const files = [];
             let total = 0;
             for (const id of new Set(ids as string[])) {
-                const bytes = await bridge.download(id, pack);
+                const bytes =
+                    archive?.read("connect", pack, id) ??
+                    (bridge ? await bridge.download(id, pack) : undefined);
+                if (!bytes) throw new Error(`未找到会话 ${id}`);
                 total += bytes.length;
                 if (total > MAX_BODY_BYTES) return c.json({ error: "归档超过 64 MiB，请分批导出" }, 413);
                 files.push({ name: `${id}.begtrace`, bytes });
@@ -284,15 +314,18 @@ export function createApp(bridge?: ConnectBridge, ingest?: IngestStore, net?: Tr
     });
 
     app.get("/api/net/session/:id", async (c) => {
-        if (!net) return c.json({ error: "trace net 未启用" }, 503);
         const source = c.req.query("source");
         if (!source) return c.json({ error: "缺少 source 参数" }, 400);
         try {
-            const bytes = await net.download(source, c.req.param("id"));
+            const id = c.req.param("id");
+            const bytes =
+                archive?.read("net", source, id) ??
+                (net ? await net.download(source, id) : undefined);
+            if (!bytes) return c.json({ error: net ? "未找到会话" : "trace net 未启用" }, net ? 404 : 503);
             return new Response(new Uint8Array(bytes), {
                 headers: {
                     "content-type": "application/octet-stream",
-                    "content-disposition": `attachment; filename="${c.req.param("id")}.begtrace"`,
+                    "content-disposition": `attachment; filename="${id}.begtrace"`,
                     "cache-control": "no-store",
                 },
             });
@@ -302,18 +335,25 @@ export function createApp(bridge?: ConnectBridge, ingest?: IngestStore, net?: Tr
     });
 
     app.delete("/api/net/session/:id", async (c) => {
-        if (!net) return c.json({ error: "trace net 未启用" }, 503);
+        if (!net && !archive) return c.json({ error: "trace net 未启用" }, 503);
         const source = c.req.query("source");
         if (!source) return c.json({ error: "缺少 source 参数" }, 400);
-        try {
-            return c.json({ deleted: await net.remove(source, c.req.param("id")) });
-        } catch (error) {
-            return c.json({ error: (error as Error).message }, 422);
+        const id = c.req.param("id");
+        // The archive is a copy, not the source of truth: an explicit delete
+        // must drop both, otherwise the row would immediately reappear.
+        let deleted = archive?.remove("net", source, id) ?? false;
+        if (net) {
+            try {
+                if (await net.remove(source, id)) deleted = true;
+            } catch {
+                // The pack may be offline; the archived copy was still removed.
+            }
         }
+        return c.json({ deleted });
     });
 
     app.post("/api/net/clear", async (c) => {
-        if (!net) return c.json({ error: "trace net 未启用" }, 503);
+        if (!net && !archive) return c.json({ error: "trace net 未启用" }, 503);
         let source: unknown;
         try {
             source = (await c.req.json()).source;
@@ -323,11 +363,15 @@ export function createApp(bridge?: ConnectBridge, ingest?: IngestStore, net?: Tr
         if (typeof source !== "string" || source.length === 0) {
             return c.json({ error: "缺少 source" }, 400);
         }
-        try {
-            return c.json({ removed: await net.clear(source) });
-        } catch (error) {
-            return c.json({ error: (error as Error).message }, 422);
+        let removed = archive?.clear("net", source) ?? 0;
+        if (net) {
+            try {
+                removed += await net.clear(source);
+            } catch {
+                // Clearing is best-effort while the pack is offline.
+            }
         }
+        return c.json({ removed });
     });
 
     app.post("/api/net/store", async (c) => {
@@ -352,7 +396,7 @@ export function createApp(bridge?: ConnectBridge, ingest?: IngestStore, net?: Tr
     });
 
     app.post("/api/net/export", async (c) => {
-        if (!net) return c.json({ error: "trace net 未启用" }, 503);
+        if (!net && !archive) return c.json({ error: "trace net 未启用" }, 503);
         try {
             const body = (await c.req.json()) as { items?: unknown };
             const items = body.items;
@@ -378,7 +422,10 @@ export function createApp(bridge?: ConnectBridge, ingest?: IngestStore, net?: Tr
                 const key = `${item.source}/${item.id}`;
                 if (seen.has(key)) continue;
                 seen.add(key);
-                const bytes = await net.download(item.source, item.id);
+                const bytes =
+                    archive?.read("net", item.source, item.id) ??
+                    (net ? await net.download(item.source, item.id) : undefined);
+                if (!bytes) throw new Error(`未找到会话 ${item.id}`);
                 total += bytes.length;
                 if (total > MAX_BODY_BYTES) {
                     return c.json({ error: "归档超过 64 MiB，请分批导出" }, 413);
@@ -412,6 +459,7 @@ function capabilities(deps: AppDeps) {
         connectTargets: deps.bridge?.configuredTargets.length ?? 0,
         net: Boolean(deps.net),
         ingest: Boolean(deps.ingest),
+        archive: Boolean(deps.archive),
     };
 }
 
@@ -470,9 +518,14 @@ function analyzePayload(buffer: Buffer, sessionId?: string) {
 ): Promise<Buffer> {
     if (!ID_PATTERN.test(id)) throw new Error("无效的会话 ID");
     if (source === "connect") {
-        if (!deps.bridge) throw new Error("连接服务未启动");
         // Command names are namespaced per pack, so the pack is not optional.
-        return deps.bridge.download(id, requirePack(pack));
+        const namespace = requirePack(pack);
+        // A finished session is served from the archive first: it is immutable,
+        // needs no round-trip, and still exists after the game disconnects.
+        const archived = deps.archive?.read("connect", namespace, id);
+        if (archived) return archived;
+        if (!deps.bridge) throw new Error("连接服务未启动");
+        return deps.bridge.download(id, namespace);
     }
     if (source === "ingest") {
         if (!deps.ingest) throw new Error("ingest 未启用");
@@ -481,9 +534,65 @@ function analyzePayload(buffer: Buffer, sessionId?: string) {
         return bytes;
     }
     if (source === "net") {
-        if (!deps.net) throw new Error("trace net 未启用");
         if (!pack) throw new Error("net 数据源需要 pack 参数");
+        const archived = deps.archive?.read("net", pack, id);
+        if (archived) return archived;
+        if (!deps.net) throw new Error("trace net 未启用");
         return deps.net.download(pack, id);
     }
     throw new Error(`未知数据源：${source}`);
+}
+
+interface ArchiveSourceSummary {
+    kind: ArchiveRecord["kind"];
+    pack: string;
+    packName?: string;
+}
+
+/** Distinct sources present in the archive, first (newest) label winning. */
+function archiveSources(records: readonly ArchiveRecord[]): ArchiveSourceSummary[] {
+    const byKey = new Map<string, ArchiveSourceSummary>();
+    for (const record of records) {
+        const key = `${record.kind}\u0000${record.pack}`;
+        const existing = byKey.get(key);
+        if (existing) {
+            if (!existing.packName && record.packName) existing.packName = record.packName;
+            continue;
+        }
+        byKey.set(key, {
+            kind: record.kind,
+            pack: record.pack,
+            ...(record.packName ? { packName: record.packName } : {}),
+        });
+    }
+    return [...byKey.values()];
+}
+
+/**
+ * Live sessions plus archived ones the live list no longer has. A finished
+ * session is immutable, so the live row wins when both exist — it may still
+ * carry store state the archive copy does not.
+ */
+function mergeArchived<T extends { sessionId: string; startWallTime?: number }>(
+    live: readonly T[],
+    records: readonly ArchiveRecord[],
+    kind: ArchiveRecord["kind"],
+    pack: string
+): unknown[] {
+    const liveIds = new Set(live.map((session) => session.sessionId));
+    const extra = records
+        .filter(
+            (record) =>
+                record.kind === kind &&
+                record.pack === pack &&
+                !liveIds.has(record.session.sessionId)
+        )
+        .map((record) => ({
+            ...record.session,
+            archived: true as const,
+            storedAt: record.storedAt,
+        }));
+    const merged: { sessionId: string; startWallTime?: number }[] = [...live, ...extra];
+    merged.sort((a, b) => (b.startWallTime ?? 0) - (a.startWallTime ?? 0));
+    return merged;
 }

@@ -33,6 +33,12 @@ export interface ServerOptions {
     ingest: boolean;
     ingestDir?: string;
     ingestToken?: string;
+    /**
+     * Mirror finished sessions from the live bridges onto disk, so the
+     * workbench keeps listing them after the game disconnects.
+     */
+    archive: boolean;
+    archiveDir?: string;
     /** Path of the config file that was loaded, for diagnostics. */
     configPath?: string;
 }
@@ -61,6 +67,8 @@ export const HELP_TEXT = `BEGame Observatory
   --ingest              开启 HTTP 上传 sink（POST /api/ingest）
   --ingest-dir <path>   上传落盘目录（默认 BEGAME_INGEST_DIR 或包内 data）
   --ingest-token <t>    上传 token（默认 BEGAME_INGEST_TOKEN）
+  --no-archive          不把 /connect、net 的已完成会话镜像到本地磁盘
+  --archive-dir <path>  归档目录（默认包内 data/archive）
   --no-http             不启动 HTTP 工作台，仅运行显式开启的桥
   -h, --help            显示本帮助
 
@@ -130,6 +138,7 @@ export function parseServerOptions(
         net: false,
         netPort: NET_PORT_DEFAULT,
         ingest: false,
+        archive: true,
     };
 
     if (config.port !== undefined) options.port = config.port;
@@ -138,6 +147,7 @@ export function parseServerOptions(
     options.ingestDir = config.ingest?.dir;
     options.ingestToken = config.ingest?.token;
     options.netToken = config.net?.token;
+    options.archiveDir = config.archive?.dir;
     // A config file listing targets is itself a request to use the bridge.
     const configuredTargets = config.connect?.targets ?? [];
     if (configuredTargets.length > 0) options.connect = true;
@@ -160,6 +170,7 @@ export function parseServerOptions(
     options.ingestToken = env.BEGAME_INGEST_TOKEN ?? options.ingestToken;
     options.netToken = env.BEGAME_NET_TOKEN ?? env.BEGAME_INGEST_TOKEN ?? options.netToken;
     options.ingestDir = env.BEGAME_INGEST_DIR ?? options.ingestDir;
+    options.archiveDir = env.BEGAME_ARCHIVE_DIR ?? options.archiveDir;
 
     // Collected separately so a CLI `--pack` replaces, rather than appends to,
     // the configured list: the command line is the higher-precedence source.
@@ -186,6 +197,9 @@ export function parseServerOptions(
                 break;
             case "--ingest":
                 options.ingest = true;
+                break;
+            case "--no-archive":
+                options.archive = false;
                 break;
             case "--pack": {
                 const value = next();
@@ -230,6 +244,13 @@ export function parseServerOptions(
                 if (value === undefined) return { ok: false, error: "--ingest-dir 需要一个路径" };
                 options.ingestDir = value;
                 options.ingest = true;
+                break;
+            }
+            case "--archive-dir": {
+                const value = next();
+                if (value === undefined) return { ok: false, error: "--archive-dir 需要一个路径" };
+                options.archiveDir = value;
+                options.archive = true;
                 break;
             }
             default:

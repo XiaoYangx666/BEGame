@@ -50,6 +50,9 @@ export interface ObservatoryConfigFile {
         readonly dir?: string;
         readonly token?: string;
     };
+    readonly archive?: {
+        readonly dir?: string;
+    };
 }
 
 export interface LoadedConfig {
@@ -147,6 +150,7 @@ function parseConfig(text: string, warnings: string[]): ObservatoryConfigFile {
     const connect = source.connect as Record<string, unknown> | undefined;
     const net = source.net as Record<string, unknown> | undefined;
     const ingest = source.ingest as Record<string, unknown> | undefined;
+    const archive = source.archive as Record<string, unknown> | undefined;
     const asObject = (value: unknown): Record<string, unknown> | undefined =>
         value !== null && typeof value === "object" && !Array.isArray(value)
             ? (value as Record<string, unknown>)
@@ -181,6 +185,13 @@ function parseConfig(text: string, warnings: string[]): ObservatoryConfigFile {
         };
     } else if (ingest !== undefined) {
         warnings.push("ingest 必须是对象，已忽略");
+    }
+    if (asObject(archive)) {
+        config.archive = {
+            dir: coerceString(archive.dir, "archive.dir", warnings),
+        };
+    } else if (archive !== undefined) {
+        warnings.push("archive 必须是对象，已忽略");
     }
     return config;
 }

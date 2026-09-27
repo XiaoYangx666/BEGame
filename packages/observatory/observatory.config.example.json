@@ -6,5 +6,8 @@
                 "games": ["doudizhu"]
             }
         }
+    },
+    "archive": {
+        "dir": "./data/archive"
     }
 }

@@ -17,6 +17,7 @@ interface Capabilities {
     connectTargets?: number;
     net: boolean;
     ingest: boolean;
+    archive: boolean;
 }
 
 interface SourceSession {
@@ -30,6 +31,8 @@ interface SourceSession {
     storedBytes?: number;
     bytes?: number;
     storedAt?: number;
+    /** True when this row came from the Observatory's on-disk archive. */
+    archived?: boolean;
 }
 
 interface NetStoreStatus {
@@ -60,6 +63,7 @@ export function App() {
         connect: false,
         net: false,
         ingest: false,
+        archive: false,
     });
 
     const [sources, setSources] = useState<SourceGroup[]>([]);
@@ -378,7 +382,7 @@ export function App() {
     // ------------------------------------------------------------------
 
     const logExports = !isLive ? result?.exports ?? [] : [];
-    const anySource = capabilities.connect || capabilities.net || capabilities.ingest;
+    const anySource = capabilities.connect || capabilities.net || capabilities.ingest || capabilities.archive;
 
     const toggleSource = useCallback((id: string) => {
         setCollapsedSources((previous) => {
@@ -665,7 +669,7 @@ function Sidebar({
                                     </span>
                                     <span className="source-count">{group.sessions.length}</span>
                                 </button>
-                                {group.kind === "net" ? (
+                                {group.kind === "net" && group.connected ? (
                                     <button
                                         className={`store-toggle${group.store?.enabled ? " on" : ""}`}
                                         disabled={busy}
@@ -695,6 +699,7 @@ function Sidebar({
                                                             <span className="mono">{session.sessionId}</span>
                                                             <span>
                                                                 {session.status === "running" ? "进行中" : "可查看"}
+                                                                {session.archived ? " · 已归档" : ""}
                                                                 {session.eventCount !== undefined ? ` · ${session.eventCount} 事件` : ""}
                                                                 {session.storedBytes !== undefined ? ` · ${fmtBytes(session.storedBytes)}` : ""}
                                                                 {session.bytes !== undefined ? ` · ${fmtBytes(session.bytes)}` : ""}
@@ -752,6 +757,7 @@ function Sidebar({
                     <span className={capabilities.connect ? "on" : ""}>/connect</span>
                     <span className={capabilities.net ? "on" : ""}>net</span>
                     <span className={capabilities.ingest ? "on" : ""}>ingest</span>
+                    <span className={capabilities.archive ? "on" : ""}>归档</span>
                 </div>
             </section>
         </aside>
@@ -918,7 +924,7 @@ function EmptyWorkspace({
                     {anySource ? (
                         <p>
                             已启用：
-                            {[capabilities.connect ? "/connect" : null, capabilities.net ? "BDS net" : null, capabilities.ingest ? "ingest" : null]
+                            {[capabilities.connect ? "/connect" : null, capabilities.net ? "BDS net" : null, capabilities.ingest ? "ingest" : null, capabilities.archive ? "本地归档" : null]
                                 .filter(Boolean)
                                 .join("、")}
                             。左侧会自动列出会话。
