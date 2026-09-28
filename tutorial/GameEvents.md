@@ -72,7 +72,7 @@ export class KcqdDaemon extends GameComponent<KcqdMainState> {
 
 ---
 
-### [interval](../docs/classes/IntervalEventSignal.md)
+### interval
 
 循环事件，会按指定间隔重复执行（默认每 tick 执行）。
 
@@ -82,7 +82,7 @@ export class KcqdDaemon extends GameComponent<KcqdMainState> {
 
 #### 订阅参数
 
-`interval?: [Duration](../docs/SAPI-Game/namespaces/Utils/classes/Duration.md)
+`interval?: Duration
 
 > 可选参数，用于指定循环间隔，默认每 tick 执行。
 
@@ -101,7 +101,7 @@ this.subscribe(Game.events.interval, () => {
 
 ---
 
-### [buttonPush](../docs/classes/ButtonPushEventSignal.md)
+### buttonPush
 
 监听游戏中指定维度指定位置的按钮被玩家按下的事件。
 
@@ -137,7 +137,7 @@ this.subscribe(Game.events.buttonPush, () => this.openDoor(), {
 
 ---
 
-### [signClick](../docs/classes/SignClickEventSignal.md)
+### signClick
 
 监听游戏中指定维度指定位置的牌子被玩家点击的事件。
 
@@ -172,7 +172,7 @@ this.subscribe(Game.events.signClick, (t) => this.handleStart(t), {
 
 ---
 
-### [itemUse](../docs/classes/ItemUseEventSignal.md)
+### itemUse
 
 监听玩家使用指定 id 的物品。可限制玩家组。
 
@@ -211,7 +211,7 @@ this.subscribe(
 
 ---
 
-### [region](../docs/classes/PlayerRegionEventSignal.md)
+### region
 
 监听玩家进入/离开指定区域
 
@@ -236,7 +236,7 @@ enum RegionEventType {
 
 #### 订阅参数
 
-`region:` [GameRegion](../docs/SAPI-Game/namespaces/Region/classes/GameRegion.md)
+`region:` GameRegion
 
 #### 示例
 
@@ -267,7 +267,7 @@ this.subscribe(
 
 ---
 
-### [onBlock](../docs/classes/PlayerOnBlockEventSignal.md)
+### onBlock
 
 监听玩家处于指定 id 的方块上。
 
@@ -316,7 +316,7 @@ this.subscribe(
 
 ---
 
-### [inSlot](../docs/classes/PlayerItemInSlotEventSignal.md)
+### inSlot
 
 指定物品在玩家指定栏位时触发
 
