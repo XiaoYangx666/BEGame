@@ -11,8 +11,10 @@ import {
     GameEngine,
     GamePlayer,
     GameState,
+    GameStructure,
     InfoScoreboard,
     SidebarScoreboard,
+    CubeRegion,
     PlayerGroup,
     PlayerGroupSet,
     PlayerLifecycle,
@@ -27,9 +29,12 @@ import {
     SpawnPointProtector,
     SphereRegion,
     StopWatch,
+    StructureBlockMask,
+    StructureProtector,
     TeamScoreBoard,
     Timer,
     playerLifecycle,
+    structureProtector,
     teamScoreboard,
     playerInfoText,
     playerNameText,
@@ -1042,3 +1047,67 @@ test("Sidebar scoreboard 同一运行时拒绝重复 objective 所有者", () =>
     env.reset();
 });
 
+
+test("StructureProtector：原图方块保护、非法放置回滚与交互拦截", () => {
+    const env = new BEGameTestEngine();
+    env.reset();
+    const player = env.connectPlayer("protector-a", "A");
+    const game = env.startGame(CombatGame, { players: [player] });
+    const state = game.getState(CombatState);
+
+    const size = { x: 3, y: 1, z: 1 };
+    const bits = new Uint8Array(1);
+    bits[0] = 0b001; // 仅 x=0 是原始结构方块
+    const mask = new StructureBlockMask(size, bits, 1);
+    const origin = { x: 0, y: 0, z: 0 };
+
+    state.addComponent(
+        StructureProtector,
+        structureProtector({
+            structure: new GameStructure("test:protect", origin),
+            mask,
+            region: new CubeRegion("minecraft:overworld", origin, { x: 2, y: 0, z: 0 }),
+            allowBreak: () => false,
+            allowPlace: () => false,
+            blockInteract: true,
+        }),
+        "protector"
+    );
+
+    const dimension = virtualMinecraft.getDimension("minecraft:overworld");
+    const original = dimension.getBlock({ x: 0, y: 0, z: 0 });
+    const other = dimension.getBlock({ x: 1, y: 0, z: 0 });
+
+    // 原始结构方块不可破坏。
+    const breakOriginal = { player, block: original, cancel: false };
+    env.emitWorldBeforeEvent("playerBreakBlock", breakOriginal);
+    expect(breakOriginal.cancel).toBe(true);
+
+    // 区域内的非原图方块也会走附加规则。
+    const breakOther = { player, block: other, cancel: false };
+    env.emitWorldBeforeEvent("playerBreakBlock", breakOther);
+    expect(breakOther.cancel).toBe(true);
+
+    // 交互拦截。
+    const interact = { player, block: other, cancel: false };
+    env.emitWorldBeforeEvent("playerInteractWithBlock", interact);
+    expect(interact.cancel).toBe(true);
+
+    // 覆盖原图方块：读不到模板时回滚为空气。
+    original.typeId = "minecraft:red_wool";
+    env.emitWorldAfterEvent("playerPlaceBlock", { player, block: original, dimension });
+    expect(original.typeId).toBe("minecraft:air");
+
+    // 区域内非法放置：回滚为空气。
+    other.typeId = "minecraft:red_wool";
+    env.emitWorldAfterEvent("playerPlaceBlock", { player, block: other, dimension });
+    expect(other.typeId).toBe("minecraft:air");
+
+    // 区域外放置不受托管。
+    const outside = dimension.getBlock({ x: 5, y: 0, z: 0 });
+    outside.typeId = "minecraft:red_wool";
+    env.emitWorldAfterEvent("playerPlaceBlock", { player, block: outside, dimension });
+    expect(outside.typeId).toBe("minecraft:red_wool");
+
+    env.reset();
+});

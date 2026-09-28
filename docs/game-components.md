@@ -45,6 +45,7 @@ packages/core/src/gameComponent/**
 | 组件 | 说明 |
 | --- | --- |
 | `RegionProtector` | 阻止区域外的破坏/交互等行为。 |
+| `StructureProtector` | 通用地图方块保护：把 mcstructure 的原始非空气方块扫成只读位图，原图方块不可破坏、覆盖原图的放置会回滚（还原原方块或空气）。可传 `region` 限定附加规则范围，用 `allowBreak` / `allowPlace` 接入游戏自己的队伍/建造规则，`blockInteract` 拦截区域内交互。位图按 structureId 全服缓存，同模板多房间只扫描一次。 |
 | `RegionTeamChooser` | 玩家进入指定区域时自动加入对应队伍。 |
 | `RegionTeamCleaner` | 玩家离开区域时自动移出对应队伍。 |
 
@@ -61,6 +62,7 @@ packages/core/src/gameComponent/**
 
 ## 最近变更
 
+- 新增 `StructureProtector` 与 `StructureBlockMask` / `structureBlockMasks`：把 mcstructure 原图非空气方块扫成只读位图，提供通用地图方块保护（原图不可破坏、覆盖原图的放置回滚），支持 `region` / `allowBreak` / `allowPlace` 接入游戏规则。
 - 新增 `playerInfoText()` 组合预设；名字与血量可共用一个 `TextPrimitive`。
 - `playerNameText().color` 支持 `string | (player) => string`，可按队伍动态着色。
 - 新增 `PlayerTextPrimitive` 与 `playerHealthText` / `playerNameText` 预设；

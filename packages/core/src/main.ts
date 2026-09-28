@@ -130,6 +130,7 @@ export { GameEngine } from "./gameEngine";
 export type { GameEngineOwner } from "./gameEngine";
 export { GameContext } from "./gameContext";
 export { GameStructure } from "./gameStructure/gameStructure";
+export * from "./gameStructure/structureBlockMask";
 export { ScriptRunner, ScriptCancelledError } from "./Runner/scriptRunner";
 export { RunnerManager } from "./Runner/RunnerManager";
 export * from "./gameEvent/index";

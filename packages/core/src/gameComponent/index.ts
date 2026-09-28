@@ -16,6 +16,7 @@ export * from "./player/friendlyFireProtector";
 export * from "./player/pvpController";
 export * from "./region/regionProtecter";
 export * from "./region/regionBoundary";
+export * from "./region/structureProtector";
 export * from "./region/regionTeamChooser";
 export * from "./region/regionTeamCleaner";
 export * from "./view/teamScoreboard";
