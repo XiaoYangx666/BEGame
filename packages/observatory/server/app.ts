@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { serveStatic } from "@hono/node-server/serve-static";
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { decodeTracePayload } from "../src/decode.mjs";
 import type { DecodeResponse } from "../src/types";
@@ -10,7 +11,27 @@ import type { TraceNetBridge } from "./net";
 import { zipFiles } from "./zip";
 
 const MAX_BODY_BYTES = 64 * 1024 * 1024;
-const VERSION = "0.0.2";
+
+/**
+ * Reported by `/api/health`.
+ *
+ * Read from the manifest instead of written here: a literal drifts on every
+ * release and nothing compares the two, so the drift stays invisible until
+ * someone trusts the number. `../package.json` resolves both in this checkout and
+ * in the published tarball, because `dist/` always sits beside the manifest.
+ */
+function readManifestVersion(): string {
+    try {
+        const manifest = fileURLToPath(new URL("../package.json", import.meta.url));
+        const parsed: unknown = JSON.parse(readFileSync(manifest, "utf8"));
+        const version = (parsed as { version?: unknown }).version;
+        return typeof version === "string" ? version : "0.0.0";
+    } catch {
+        return "0.0.0";
+    }
+}
+
+const VERSION = readManifestVersion();
 const ID_PATTERN = /^[A-Za-z0-9_-]{1,120}$/;
 /** Bedrock command namespaces are lowercase alphanumerics/underscore only. */
 const NAMESPACE_PATTERN = /^[a-z0-9_]+$/;

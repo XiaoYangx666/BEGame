@@ -1,6 +1,11 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { encodeBegTrace } from "../packages/trace/dist/index.js";
 import { createApp } from "../packages/observatory/server/app.ts";
+
+const observatoryManifest = JSON.parse(
+    readFileSync(new URL("../packages/observatory/package.json", import.meta.url), "utf8")
+);
 
 function makeTraceBytes(sessionId) {
     return encodeBegTrace(
@@ -31,7 +36,10 @@ test("observatory server exposes health, decode and static assets", async () => 
 
     const health = await app.request("/api/health");
     expect(health.status).toBe(200);
-    expect((await health.json()).ok).toBe(true);
+    const healthBody = await health.json();
+    expect(healthBody.ok).toBe(true);
+    // Guards against the version drifting from the manifest it is published with.
+    expect(healthBody.version).toBe(observatoryManifest.version);
 
     const decoded = await app.request("/api/decode", {
         method: "POST",
