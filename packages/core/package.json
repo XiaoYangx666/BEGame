@@ -1,6 +1,6 @@
 {
     "name": "@begame/core",
-    "version": "0.0.2",
+    "version": "0.1.0",
     "description": "Minecraft Bedrock game lifecycle framework",
     "type": "module",
     "main": "./dist/main.js",
@@ -66,16 +66,20 @@
         }
     },
     "dependencies": {
-        "@begame/trace-spec": "0.0.2"
+        "@begame/trace-spec": "0.1.0"
     },
     "peerDependencies": {
         "@minecraft/server": ">=2.10.0",
         "@minecraft/server-ui": ">=2.2.0"
     },
     "license": "MIT",
+    "publishConfig": {
+        "access": "public"
+    },
     "repository": {
         "type": "git",
-        "url": "https://github.com/XiaoYangx666/SAPI-Game.git"
+        "url": "git+https://github.com/XiaoYangx666/SAPI-Game.git",
+        "directory": "packages/core"
     },
     "keywords": ["minecraft", "bedrock", "scriptapi", "minigame", "game-framework"]
 }

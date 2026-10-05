@@ -1,6 +1,6 @@
 {
     "name": "@begame/test",
-    "version": "0.0.2",
+    "version": "0.1.0",
     "description": "Headless lifecycle test engine for BEGame",
     "type": "module",
     "main": "./dist/index.js",
@@ -21,16 +21,20 @@
         }
     },
     "dependencies": {
-        "@begame/core": "0.0.2",
-        "@begame/trace": "0.0.2"
+        "@begame/core": "0.1.0",
+        "@begame/trace": "0.1.0"
     },
     "peerDependencies": {
         "vitest": ">=5.0.0 <6.0.0"
     },
     "license": "MIT",
+    "publishConfig": {
+        "access": "public"
+    },
     "repository": {
         "type": "git",
-        "url": "https://github.com/XiaoYangx666/SAPI-Game.git"
+        "url": "git+https://github.com/XiaoYangx666/SAPI-Game.git",
+        "directory": "packages/test"
     },
     "keywords": ["minecraft", "bedrock", "testing", "vitest", "headless"]
 }

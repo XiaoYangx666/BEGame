@@ -1,11 +1,11 @@
 {
     "name": "@begame/observatory",
-    "version": "0.0.2",
+    "version": "0.1.0",
     "description": "BEGame trace analysis workspace and service",
     "type": "module",
     "main": "./dist/server.js",
     "bin": {
-        "bgobs": "./dist/cli.js"
+        "bgobs": "dist/cli.js"
     },
     "files": [
         "dist",
@@ -18,16 +18,17 @@
         "start": "node dist/cli.js"
     },
     "dependencies": {
-        "@begame/trace": "0.0.2",
+        "@begame/trace": "0.1.0",
         "@hono/node-server": "^2.1.1",
-        "hono": "^4.13.7",
-        "react": "^19.3.0",
-        "react-dom": "^19.3.0"
+        "hono": "^4.13.7"
     },
     "license": "MIT",
+    "publishConfig": {
+        "access": "public"
+    },
     "repository": {
         "type": "git",
-        "url": "https://github.com/XiaoYangx666/SAPI-Game.git",
+        "url": "git+https://github.com/XiaoYangx666/SAPI-Game.git",
         "directory": "packages/observatory"
     },
     "keywords": [

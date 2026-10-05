@@ -1,6 +1,6 @@
 {
     "name": "@begame/trace-spec",
-    "version": "0.0.2",
+    "version": "0.1.0",
     "description": "BEGame Trace vocabulary: event ids, value and schema types, error marker",
     "type": "module",
     "main": "./dist/index.js",
@@ -18,9 +18,13 @@
         }
     },
     "license": "MIT",
+    "publishConfig": {
+        "access": "public"
+    },
     "repository": {
         "type": "git",
-        "url": "https://github.com/XiaoYangx666/SAPI-Game.git"
+        "url": "git+https://github.com/XiaoYangx666/SAPI-Game.git",
+        "directory": "packages/trace-spec"
     },
     "keywords": ["minecraft", "bedrock", "trace", "spec"]
 }

@@ -1,7 +1,7 @@
 {
     "name": "begame-monorepo",
     "private": true,
-    "version": "0.0.2",
+    "version": "0.1.0",
     "description": "BEGame - Minecraft Bedrock game lifecycle framework",
     "type": "module",
     "workspaces": [
@@ -12,6 +12,7 @@
         "build": "npm run clean && tsc --noEmit && rolldown -c && npm run build:observatory",
         "build:observatory": "npm run build --workspace @begame/observatory",
         "pack": "node scripts/pack.mjs",
+        "release": "node scripts/publish.mjs",
         "test": "vitest run",
         "test:unit": "vitest run",
         "test:treeshake": "node scripts/treeshake-probe.mjs",

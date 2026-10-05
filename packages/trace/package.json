@@ -1,6 +1,6 @@
 {
     "name": "@begame/trace",
-    "version": "0.0.2",
+    "version": "0.1.0",
     "description": "BEGame Trace: codec, session manager and history store, plus the Minecraft binding",
     "type": "module",
     "main": "./dist/index.js",
@@ -26,10 +26,10 @@
         }
     },
     "dependencies": {
-        "@begame/trace-spec": "0.0.2"
+        "@begame/trace-spec": "0.1.0"
     },
     "peerDependencies": {
-        "@begame/core": "0.0.2",
+        "@begame/core": "0.1.0",
         "@minecraft/server": ">=2.10.0",
         "@minecraft/server-net": "*"
     },
@@ -45,9 +45,13 @@
         }
     },
     "license": "MIT",
+    "publishConfig": {
+        "access": "public"
+    },
     "repository": {
         "type": "git",
-        "url": "https://github.com/XiaoYangx666/SAPI-Game.git"
+        "url": "git+https://github.com/XiaoYangx666/SAPI-Game.git",
+        "directory": "packages/trace"
     },
     "keywords": ["minecraft", "bedrock", "trace", "runtime"]
 }
