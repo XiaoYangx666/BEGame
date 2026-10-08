@@ -21,7 +21,9 @@
         "fixture:observatory": "node scripts/make-observatory-fixture.mjs",
         "observatory": "node packages/observatory/dist/cli.js",
         "observatory:connect": "node packages/observatory/dist/cli.js --connect",
-        "observatory:net": "node packages/observatory/dist/cli.js --net"
+        "observatory:net": "node packages/observatory/dist/cli.js --net",
+        "release:check": "node scripts/publish.mjs --dry-run",
+        "release:stable": "node scripts/publish.mjs --tag latest"
     },
     "devDependencies": {
         "@minecraft/server": "2.10.0",

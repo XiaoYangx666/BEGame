@@ -3,6 +3,9 @@ node_modules
 cache
 dist
 *.tgz
+*.log
 packages/observatory/public/build
 traces/
 packages/observatory/data
+
+artifacts/
