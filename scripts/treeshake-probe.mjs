@@ -13,8 +13,7 @@
  * Usage: node scripts/treeshake-probe.mjs [--json]
  */
 import { rolldown } from "rolldown";
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
-import { tmpdir } from "node:os";
+import { access, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -73,10 +72,12 @@ const CASES = [
         name: "gameState-subpath",
         entry: `import { GameState } from "@begame/core/gameState";\nexport const probe = GameState;\n`,
         import: "@begame/core/gameState",
+        require: ["core/dist/gameState/gameState"],
         forbid: [...COMPONENT_MODULES, ...RUNTIME_TRACE_MODULES],
     },
     {
         name: "timer-component-only",
+        require: ["core/dist/gameComponent/common/timer/timer"],
         entry: `import { Timer } from "@begame/core";\nexport const probe = Timer;\n`,
         import: "@begame/core",
         forbid: [
@@ -110,6 +111,7 @@ const CASES = [
         // or the game runtime in, which is what lets the observatory run in
         // plain Node.
         name: "trace-codec-root",
+        require: ["trace/dist/wire/decoder", "trace/dist/tools/logParser"],
         entry: `import { decodeTraceLog, decodeBegTrace } from "@begame/trace";\nexport const probe = [decodeTraceLog, decodeBegTrace];\n`,
         import: "@begame/trace",
         forbid: [
@@ -149,11 +151,21 @@ async function bundleCase(dir, testCase) {
         input: entryFile,
         external: EXTERNAL,
         resolve: { modules: [path.join(root, "node_modules")] },
-        logLevel: "silent",
+        onLog(level, log, defaultHandler) {
+            if (log.code === "UNRESOLVED_IMPORT") {
+                throw new Error(`Package resolution failed: ${log.message}`);
+            }
+            defaultHandler(level, log);
+        },
     });
     try {
         const { output } = await bundle.generate({ format: "esm", minify: false });
         const chunks = output.filter((item) => item.type === "chunk");
+        const unexpectedImports = chunks.flatMap((chunk) => chunk.imports)
+            .filter((specifier) => !EXTERNAL.includes(specifier));
+        if (unexpectedImports.length > 0) {
+            throw new Error(`Unexpected external imports: ${unexpectedImports.join(", ")}`);
+        }
         const code = chunks.map((item) => item.code).join("\n");
 
         const ids = new Set();
@@ -177,7 +189,21 @@ async function bundleCase(dir, testCase) {
     }
 }
 
-const dir = await mkdtemp(path.join(tmpdir(), "begame-treeshake-"));
+// Check exports and build output before a missing package can become external.
+for (const testCase of CASES) {
+    const entry = fileURLToPath(import.meta.resolve(testCase.import));
+    try {
+        await access(entry);
+    } catch {
+        throw new Error(`Missing build output for ${testCase.import}: ${entry}. Run npm run build first, then run this probe after the build finishes.`);
+    }
+}
+
+// Keep consumers under the repository so platform temp directories cannot
+// introduce a different ancestor package tree during resolution.
+const cacheDir = path.join(root, "cache");
+await mkdir(cacheDir, { recursive: true });
+const dir = await mkdtemp(path.join(cacheDir, "begame-treeshake-"));
 const results = [];
 try {
     for (const testCase of CASES) {
