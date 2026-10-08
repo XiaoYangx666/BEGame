@@ -1,5 +1,5 @@
-import { GameComponentType } from "@sapi-game/gameComponent/gameComponent";
-import { GameStateError } from "@sapi-game/utils/GameError";
+import { GameComponentType } from "@begame/core/gameComponent/gameComponent";
+import { GameStateError } from "@begame/core/utils/GameError";
 
 export class GameComponentNotExistsError extends GameStateError {
     constructor(

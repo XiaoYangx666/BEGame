@@ -2,8 +2,8 @@ import { GameMode } from "@minecraft/server";
 import {
     PlayerRegionEvent,
     RegionEventType,
-} from "@sapi-game/gameEvent/events/regionEvents";
-import { Game } from "@sapi-game/main";
+} from "@begame/core/gameEvent/events/regionEvents";
+import { Game } from "@begame/core/main";
 import { GamePlayer } from "../../gamePlayer/gamePlayer";
 import { PlayerGroup } from "../../gamePlayer/playerGroup";
 import { GameRegion } from "../../gameRegion/gameRegion";

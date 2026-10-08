@@ -1,11 +1,11 @@
 import { Player } from "@minecraft/server";
-import { RegionEventType } from "@sapi-game/gameEvent/events/regionEvents";
-import { GamePlayer } from "@sapi-game/gamePlayer/gamePlayer";
-import { PlayerGroupSet } from "@sapi-game/gamePlayer/groupSet";
-import { PlayerGroup } from "@sapi-game/gamePlayer/playerGroup";
-import { GameRegion } from "@sapi-game/gameRegion/gameRegion";
-import { GameState } from "@sapi-game/gameState/gameState";
-import { Game } from "@sapi-game/main";
+import { RegionEventType } from "@begame/core/gameEvent/events/regionEvents";
+import { GamePlayer } from "@begame/core/gamePlayer/gamePlayer";
+import { PlayerGroupSet } from "@begame/core/gamePlayer/groupSet";
+import { PlayerGroup } from "@begame/core/gamePlayer/playerGroup";
+import { GameRegion } from "@begame/core/gameRegion/gameRegion";
+import { GameState } from "@begame/core/gameState/gameState";
+import { Game } from "@begame/core/main";
 import { GameComponent } from "../gameComponent";
 
 interface RegionTeamCleanUpBase {

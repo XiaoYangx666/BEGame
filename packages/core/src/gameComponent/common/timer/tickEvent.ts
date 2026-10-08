@@ -1,9 +1,9 @@
 import {
     CustomEventSignal,
     EventCallBack,
-} from "@sapi-game/gameEvent/eventSignal";
-import { Subscription } from "@sapi-game/gameEvent/subscription";
-import { Logger } from "@sapi-game/utils";
+} from "@begame/core/gameEvent/eventSignal";
+import { Subscription } from "@begame/core/gameEvent/subscription";
+import { Logger } from "@begame/core/utils";
 
 export interface TimerTickEvent {
     remainingTime: number;

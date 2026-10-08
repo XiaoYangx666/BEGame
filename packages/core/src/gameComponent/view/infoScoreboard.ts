@@ -1,5 +1,5 @@
-import { EventSignal } from "@sapi-game/gameEvent/eventSignal";
-import { GameState } from "@sapi-game/gameState/gameState";
+import { EventSignal } from "@begame/core/gameEvent/eventSignal";
+import { GameState } from "@begame/core/gameState/gameState";
 import { GameComponent } from "../gameComponent";
 import {
     SidebarScoreResolver,

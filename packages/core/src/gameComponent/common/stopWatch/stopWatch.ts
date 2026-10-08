@@ -1,5 +1,5 @@
-import { GameState } from "@sapi-game/gameState/gameState";
-import { Game } from "@sapi-game/main";
+import { GameState } from "@begame/core/gameState/gameState";
+import { Game } from "@begame/core/main";
 import { GameComponent } from "../../gameComponent";
 import { StopWatchOnTimeEventSignal } from "./onTimeEvent";
 import { StopWatchTickEventSignal } from "./tickEvent";

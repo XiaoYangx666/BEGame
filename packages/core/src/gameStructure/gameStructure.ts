@@ -4,7 +4,7 @@ import {
     Vector3,
     world,
 } from "@minecraft/server";
-import { DimensionIds } from "@sapi-game/utils/vanila-data";
+import { DimensionIds } from "@begame/core/utils/vanila-data";
 
 /**游戏结构 */
 export class GameStructure {

@@ -1,7 +1,7 @@
 import { Block, Player } from "@minecraft/server";
-import { PlayerGroup } from "@sapi-game/gamePlayer/playerGroup";
-import { gameServer } from "@sapi-game/system/server";
-import { Logger, Vector3Utils } from "@sapi-game/utils";
+import { PlayerGroup } from "@begame/core/gamePlayer/playerGroup";
+import { gameServer } from "@begame/core/system/server";
+import { Logger, Vector3Utils } from "@begame/core/utils";
 import { CustomEventSignal } from "../eventSignal";
 import { SubscriptionData } from "../mapEventSignal";
 import { Subscription } from "../subscription";

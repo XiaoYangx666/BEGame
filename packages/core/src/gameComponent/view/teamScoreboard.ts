@@ -1,5 +1,5 @@
-import { GamePlayer, PlayerGroup } from "@sapi-game/gamePlayer";
-import { GameState } from "@sapi-game/gameState";
+import { GamePlayer, PlayerGroup } from "@begame/core/gamePlayer";
+import { GameState } from "@begame/core/gameState";
 import {
     SidebarScoreboard,
     SidebarScoreboardOptions,

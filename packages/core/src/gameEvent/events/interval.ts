@@ -1,5 +1,5 @@
 import { system } from "@minecraft/server";
-import { Logger } from "@sapi-game/utils";
+import { Logger } from "@begame/core/utils";
 import { Duration } from "../../utils/duration";
 import { CustomEventSignal } from "../eventSignal";
 import { Subscription } from "../subscription";

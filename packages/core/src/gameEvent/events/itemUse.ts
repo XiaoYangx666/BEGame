@@ -1,5 +1,5 @@
 import { ItemUseAfterEvent, Player, world } from "@minecraft/server";
-import { PlayerGroup } from "@sapi-game/gamePlayer/playerGroup";
+import { PlayerGroup } from "@begame/core/gamePlayer/playerGroup";
 import { BaseMapEventSignal, SubscriptionData } from "../mapEventSignal";
 
 export interface itemData extends SubscriptionData<ItemUseAfterEvent> {

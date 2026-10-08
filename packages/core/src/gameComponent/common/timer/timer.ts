@@ -1,5 +1,5 @@
-import { GameState } from "@sapi-game/gameState/gameState";
-import { Game } from "@sapi-game/main";
+import { GameState } from "@begame/core/gameState/gameState";
+import { Game } from "@begame/core/main";
 import { BuiltinTraceEventType } from "../../../trace/contract";
 import { GameComponent } from "../../gameComponent";
 import { TimerOnTimeEventSignal } from "./onTimeEvent";

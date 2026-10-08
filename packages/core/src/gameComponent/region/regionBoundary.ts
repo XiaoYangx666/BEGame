@@ -1,8 +1,8 @@
-import { GamePlayer, PlayerSource, resolvePlayerEntries } from "@sapi-game/gamePlayer";
-import { GameRegion } from "@sapi-game/gameRegion/gameRegion";
-import { GameState } from "@sapi-game/gameState";
-import { Game } from "@sapi-game/main";
-import { Duration } from "@sapi-game/utils";
+import { GamePlayer, PlayerSource, resolvePlayerEntries } from "@begame/core/gamePlayer";
+import { GameRegion } from "@begame/core/gameRegion/gameRegion";
+import { GameState } from "@begame/core/gameState";
+import { Game } from "@begame/core/main";
+import { Duration } from "@begame/core/utils";
 import { PlayerGroup } from "../../gamePlayer/playerGroup";
 import { GameComponent } from "../gameComponent";
 

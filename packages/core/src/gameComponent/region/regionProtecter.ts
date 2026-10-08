@@ -7,9 +7,9 @@ import {
     PlayerGroupSet,
     PlayerSource,
     playerSourceHas,
-} from "@sapi-game/gamePlayer";
-import { GameRegion } from "@sapi-game/gameRegion/gameRegion";
-import { GameState } from "@sapi-game/gameState";
+} from "@begame/core/gamePlayer";
+import { GameRegion } from "@begame/core/gameRegion/gameRegion";
+import { GameState } from "@begame/core/gameState";
 import { GameComponent } from "../gameComponent";
 
 export interface RegionProtectionOptions {

@@ -25,8 +25,7 @@
             "@begame/trace/minecraft": ["./packages/trace/src/minecraft.ts"],
             "@begame/trace/*": ["./packages/trace/src/*"],
             "@begame/trace-spec": ["./packages/trace-spec/src/index.ts"],
-            "@begame/trace-spec/*": ["./packages/trace-spec/src/*"],
-            "@sapi-game/*": ["./packages/core/src/*"]
+            "@begame/trace-spec/*": ["./packages/trace-spec/src/*"]
         }
     },
     "include": [

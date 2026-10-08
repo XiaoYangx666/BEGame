@@ -4,9 +4,9 @@ import {
     ItemStack,
     Player,
 } from "@minecraft/server";
-import { PlayerGroup } from "@sapi-game/gamePlayer/playerGroup";
-import { gameServer } from "@sapi-game/system/server";
-import { Logger } from "@sapi-game/utils";
+import { PlayerGroup } from "@begame/core/gamePlayer/playerGroup";
+import { gameServer } from "@begame/core/system/server";
+import { Logger } from "@begame/core/utils";
 import { CustomEventSignal } from "../eventSignal";
 import { Subscription } from "../subscription";
 import { IntervalEventSignal } from "./interval";

@@ -1,7 +1,7 @@
-import { GamePlayer, PlayerSource } from "@sapi-game/gamePlayer";
-import { GameRegion } from "@sapi-game/gameRegion/gameRegion";
-import { GameState } from "@sapi-game/gameState";
-import { Duration } from "@sapi-game/utils";
+import { GamePlayer, PlayerSource } from "@begame/core/gamePlayer";
+import { GameRegion } from "@begame/core/gameRegion/gameRegion";
+import { GameState } from "@begame/core/gameState";
+import { Duration } from "@begame/core/utils";
 import {
     RegionBoundary,
     RegionBoundaryOptions,

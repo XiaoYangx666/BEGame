@@ -1,7 +1,7 @@
 import { Vector3, world } from "@minecraft/server";
-import { Game, GameState } from "@sapi-game/main";
-import { Duration, Logger } from "@sapi-game/utils";
-import { DimensionIds } from "@sapi-game/utils/vanila-data";
+import { Game, GameState } from "@begame/core/main";
+import { Duration, Logger } from "@begame/core/utils";
+import { DimensionIds } from "@begame/core/utils/vanila-data";
 import { GameComponent, GameComponentType } from "../gameComponent";
 
 export interface ChunkScopeOptions {

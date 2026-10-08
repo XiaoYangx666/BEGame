@@ -6,15 +6,15 @@ import {
     Vector3,
     world,
 } from "@minecraft/server";
-import { CubeRegion, GameRegion } from "@sapi-game/gameRegion/gameRegion";
-import { playerSourceHas, type PlayerSource } from "@sapi-game/gamePlayer";
-import { GameState } from "@sapi-game/gameState";
-import { GameStructure } from "@sapi-game/gameStructure/gameStructure";
+import { CubeRegion, GameRegion } from "@begame/core/gameRegion/gameRegion";
+import { playerSourceHas, type PlayerSource } from "@begame/core/gamePlayer";
+import { GameState } from "@begame/core/gameState";
+import { GameStructure } from "@begame/core/gameStructure/gameStructure";
 import {
     StructureBlockMask,
     structureBlockMasks,
-} from "@sapi-game/gameStructure/structureBlockMask";
-import { Logger } from "@sapi-game/utils";
+} from "@begame/core/gameStructure/structureBlockMask";
+import { Logger } from "@begame/core/utils";
 import { GameComponent } from "../gameComponent";
 
 export interface StructureProtectorOptions {

@@ -1,6 +1,6 @@
-import { CustomEventSignal } from "@sapi-game/gameEvent/eventSignal";
-import { Subscription } from "@sapi-game/gameEvent/subscription";
-import { Logger } from "@sapi-game/utils/logger";
+import { CustomEventSignal } from "@begame/core/gameEvent/eventSignal";
+import { Subscription } from "@begame/core/gameEvent/subscription";
+import { Logger } from "@begame/core/utils/logger";
 
 interface StopWatchOnTimeEventData {
     time: number;

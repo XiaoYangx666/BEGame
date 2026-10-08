@@ -1,9 +1,9 @@
 import { Player } from "@minecraft/server";
-import { GameRegion } from "@sapi-game/gameRegion/gameRegion";
-import { gameServer } from "@sapi-game/system/server";
-import { difference } from "@sapi-game/utils/func";
-import { Logger } from "@sapi-game/utils/logger";
-import { DimensionIds } from "@sapi-game/utils/vanila-data";
+import { GameRegion } from "@begame/core/gameRegion/gameRegion";
+import { gameServer } from "@begame/core/system/server";
+import { difference } from "@begame/core/utils/func";
+import { Logger } from "@begame/core/utils/logger";
+import { DimensionIds } from "@begame/core/utils/vanila-data";
 import { CustomEventSignal } from "../eventSignal";
 import { Subscription } from "../subscription";
 import { IntervalEventSignal } from "./interval";

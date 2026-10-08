@@ -1,4 +1,4 @@
-import { SAPIGameConfig } from "@sapi-game/config";
+import { SAPIGameConfig } from "@begame/core/config";
 
 export enum logLevel {
     debug = 0,

@@ -1,4 +1,4 @@
-import { Logger } from "@sapi-game/utils";
+import { Logger } from "@begame/core/utils";
 import { CustomEventSignal } from "./eventSignal";
 import { Subscription } from "./subscription";
 
