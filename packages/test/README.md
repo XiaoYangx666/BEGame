@@ -24,6 +24,6 @@ export default defineBEGameTestConfig({
 
 The configuration maps Minecraft imports to the test host. Tests execute BEGame's actual framework code. Use BEGameTestEngine to connect/disconnect players, start your game and advance ticks; release the environment after each test.
 
-[Testing guide and examples（中文）](https://github.com/XiaoYangx666/SAPI-Game/blob/HEAD/docs/TEST_ENGINE.md)
+[Testing guide and examples（中文）](https://github.com/XiaoYangx666/BEGame/blob/HEAD/docs/TEST_ENGINE.md)
 
 Keep installed BEGame packages on the same release version. MIT licensed.

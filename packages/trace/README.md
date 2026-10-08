@@ -29,6 +29,6 @@ initBEGame({ trace: createTraceRuntime(), traceStore: true });
 
 Core has no Trace implementation dependency; inject it explicitly. History retention and export transports are configured separately.
 
-[Trace guide](https://github.com/XiaoYangx666/SAPI-Game/blob/HEAD/docs/game-trace.md) · [BDS integration](https://github.com/XiaoYangx666/SAPI-Game/blob/HEAD/docs/server-net-export.md)
+[Trace guide](https://github.com/XiaoYangx666/BEGame/blob/HEAD/docs/game-trace.md) · [BDS integration](https://github.com/XiaoYangx666/BEGame/blob/HEAD/docs/server-net-export.md)
 
 Keep installed BEGame packages on the same release version. MIT licensed.

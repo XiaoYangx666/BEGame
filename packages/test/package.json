@@ -33,7 +33,7 @@
     },
     "repository": {
         "type": "git",
-        "url": "git+https://github.com/XiaoYangx666/SAPI-Game.git",
+        "url": "git+https://github.com/XiaoYangx666/BEGame.git",
         "directory": "packages/test"
     },
     "keywords": ["minecraft", "bedrock", "testing", "vitest", "headless"]

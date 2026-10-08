@@ -24,8 +24,8 @@ Initialization configures the framework; it does not start a game. Built-in comm
 
 ## Documentation
 
-- [Getting started](https://github.com/XiaoYangx666/SAPI-Game/blob/HEAD/docs/getting-started.md)
-- [Architecture and ownership](https://github.com/XiaoYangx666/SAPI-Game/blob/HEAD/docs/architecture.md)
-- [Guides and tutorials](https://github.com/XiaoYangx666/SAPI-Game/blob/HEAD/docs/README.md)
+- [Getting started](https://github.com/XiaoYangx666/BEGame/blob/HEAD/docs/getting-started.md)
+- [Architecture and ownership](https://github.com/XiaoYangx666/BEGame/blob/HEAD/docs/architecture.md)
+- [Guides and tutorials](https://github.com/XiaoYangx666/BEGame/blob/HEAD/docs/README.md)
 
 Keep installed BEGame packages on the same release version. MIT licensed.

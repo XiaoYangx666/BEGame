@@ -2,7 +2,7 @@
   <img src="./docs/_media/brand/begame-logo-concept-v1.png" alt="BEGame" width="520">
 </p>
 
-[![Verify](https://github.com/XiaoYangx666/SAPI-Game/actions/workflows/verify.yml/badge.svg)](https://github.com/XiaoYangx666/SAPI-Game/actions/workflows/verify.yml) [![MIT](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](./LICENSE) [![QQ](https://img.shields.io/badge/QQ-1004513100-12B7F5?style=flat-square)](https://qm.qq.com/q/YCQ7ohJpIc)
+[![Verify](https://github.com/XiaoYangx666/BEGame/actions/workflows/verify.yml/badge.svg)](https://github.com/XiaoYangx666/BEGame/actions/workflows/verify.yml) [![MIT](https://img.shields.io/badge/License-MIT-blue?style=flat-square)](./LICENSE) [![QQ](https://img.shields.io/badge/QQ-1004513100-12B7F5?style=flat-square)](https://qm.qq.com/q/YCQ7ohJpIc)
 
 **A framework for building games and gameplay Addons on Minecraft Bedrock.**
 

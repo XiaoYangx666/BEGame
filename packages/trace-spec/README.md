@@ -16,6 +16,6 @@ Most game authors receive this package transitively through core or Trace. Insta
 import { BuiltinTraceEventType, TRACE_MAGIC } from "@begame/trace-spec";
 ```
 
-[Trace guide](https://github.com/XiaoYangx666/SAPI-Game/blob/HEAD/docs/game-trace.md)
+[Trace guide](https://github.com/XiaoYangx666/BEGame/blob/HEAD/docs/game-trace.md)
 
 Keep installed BEGame packages on the same release version. MIT licensed.
