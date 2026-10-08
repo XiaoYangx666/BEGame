@@ -6,35 +6,43 @@ Game Trace is a structured, per-game execution history. It is not a console logg
 
 High-frequency world activity (tick, position, block changes, effects, all Minecraft events) is not captured by default. A future diagnostic mode may add opt-in detail without changing the core format.
 
-## `/connect` live inspection
+## Quick start: record and inspect
 
-The Minecraft pack must register the read-only bridge before the startup event:
+Install the game-side Trace package with your matching BEGame version:
 
-```ts
+~~~sh
+npm install @begame/trace
+~~~
+
+Register the bridge in the behavior pack that owns the Trace runtime, before the startup event. Use the pack's existing custom-command namespace:
+
+~~~ts
 import { initBEGame } from "@begame/core";
 import { createTraceRuntime, registerTraceConnectCommands } from "@begame/trace/minecraft";
 
 const trace = createTraceRuntime();
-registerTraceConnectCommands(trace);
+registerTraceConnectCommands(trace, { namespace: "game" });
 initBEGame({ trace, traceStore: { enabled: true, maxSessions: 500, maxBytes: 32 * 1024 * 1024 } });
-```
+~~~
 
-Build once with `npm run build`, then start the Observatory with
-`npm run observatory:connect` (or `--connect`), and run
-`/connect ws://127.0.0.1:18789` in the Bedrock world. Open
-`http://127.0.0.1:8787` to inspect sessions and export all as a ZIP of
-`.begtrace` files. The connection uses unencrypted WebSocket bound only to
-loopback. The three commands (`begame:tracelist`, `begame:traceinfo`,
-`begame:tracepart`) return data in `commandResponse`, with 8192-character
-Base64 parts. The observed game client did not display those responses in chat.
+Install and run the workbench on your computer:
 
-The UI refreshes the session list every three seconds. Opening a running
-session also refreshes its snapshot every three seconds; snapshots seal the
-current trace chunk and are labeled running in the UI. Exporting a running
-session saves that moment's snapshot. The bridge reads the current pack's
-`TraceManager` and therefore must be registered in the same behavior pack as
-the runtime that records the games. Existing sessions remain subject to that
-store's retention settings.
+~~~sh
+npm install -g @begame/observatory
+bgobs --connect --pack game
+~~~
+
+In the Bedrock client world, connect with operator permissions:
+
+~~~text
+/connect ws://127.0.0.1:18789
+~~~
+
+Open http://127.0.0.1:8787 to inspect sessions and export .begtrace files or a ZIP. The namespace passed to --pack must match registration. The default registration namespace is begame, but a pack already using another namespace must reuse its own.
+
+The list and open running session refresh every three seconds. Exporting a running session saves a snapshot of that moment; game-side history is still subject to retention settings. The bridge uses commandResponse data and Base64 parts rather than chat output.
+
+See the [Observatory guide](../packages/observatory/README.md) for configuration, local archives and CLI options. For dedicated servers use [server-net](./server-net-export.md). Repository developers can build once and use npm run observatory:connect -- --pack game.
 
 ## Runtime architecture
 
@@ -384,7 +392,7 @@ npm run observatory:connect    # 额外开启 /connect 桥
 npm run observatory:net        # 额外开启 BDS server-net 桥
 ```
 
-Then open `http://127.0.0.1:8787` (override with `--port <n>` or `PORT=xxxx`). The UI is a React app (React 19, bundled by rolldown into `packages/observatory/public/build/app.js`). The API is a Hono app (`packages/observatory/server/`, TypeScript) bundled by rolldown into `packages/observatory/dist/server.js` with Hono inlined, so running it still needs no installed dependencies.
+Then open `http://127.0.0.1:8787` (override with `--port <n>` or `PORT=xxxx`). The UI is a React app (React 19, bundled by rolldown into `packages/observatory/public/build/app.js`, with React inlined, so it is a build-time dependency only). The API is a Hono app (`packages/observatory/server/`, TypeScript) bundled by rolldown into `packages/observatory/dist/server.js`; `hono`, `@hono/node-server` and `@begame/trace` deliberately stay external and resolve from the package's declared dependencies.
 
 ### 按需端口
 

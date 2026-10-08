@@ -28,7 +28,7 @@ vocabulary and produce false positives.
 
 ## `sideEffects`
 
-Every published package declares it. `false` means "nothing here runs for its
+The runtime library packages declare it. Observatory is a CLI application. `false` means "nothing here runs for its
 own sake", which lets bundlers drop unused re-exports from barrels.
 
 `@begame/core` cannot use `false`. Three modules do real work at import time:
@@ -117,7 +117,7 @@ The boundary is enforced rather than merely intended. Because it is a convention
 rather than a package-graph guarantee, `tests/trace-isolation.test.mjs` asserts
 it mechanically on the built output:
 
-- only `dist/minecraft.js` may import `@minecraft/*` or `@begame/core`;
+- the platform bindings `dist/minecraft.js` and `dist/serverNet.js` may import Minecraft modules; platform-independent entries must remain isolated;
 - `dist/index.js` must not re-export `./minecraft`, since that would silently
   give every codec consumer a Minecraft dependency;
 - `packages/core/dist` must not reach `@begame/trace` at all.
@@ -129,3 +129,7 @@ It reads `dist` rather than source because that is what consumers actually load.
 Deferring the load would also work, but it makes enabling tracing asynchronous,
 which conflicts with the worldLoad ordering the runtime already depends on. The
 opt-in entry keeps the composition synchronous and order-stable.
+
+## Release
+
+See the [release guide](./releasing.md) for synchronized versions, package validation, preview releases and publication order. The root workspace is private; the five package workspaces publish individually.

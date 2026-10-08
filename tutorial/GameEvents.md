@@ -1,6 +1,6 @@
 # GameEvents
 
-> 为了方便游戏开发，SAPI-Game 内置了一些包装事件，和 sapi 的事件格式基本保持一致。
+> 为了方便游戏开发，BEGame 内置了一些包装事件，和 sapi 的事件格式基本保持一致。
 
 ## 如何订阅事件
 
@@ -24,7 +24,7 @@ this.subscribe(world.beforeEvents.effectAdd, (e) => {
 
 ```ts
 //订阅框架事件
-import { Game } from "sapi-game/main";
+import { Game } from "@begame/core";
 this.subscribe(
     Game.events.interval,
     () => {

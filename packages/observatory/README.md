@@ -81,9 +81,6 @@ bgobs --connect --pack ddz
 
 `observatory.config.example.json` 是一个可直接复制的模板。
 
-> 早期版本尝试用世界计分板 objective 让客户端自动发现 namespace，但该机制从未
-> 验证成功，已移除。现在 namespace 一律走配置。
-
 ## 配置优先级
 
 命令行 > 环境变量 > 配置文件 > 默认值。

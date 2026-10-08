@@ -24,6 +24,9 @@ packages/core/src/gameComponent/**
 | `DisconnectTimeoutComponent` | 每个玩家独立的掉线宽限计时，重连取消，超时释放参与关系。 |
 | `AutoStopComponent` | 房间无人后自动停止游戏（参与关系或自定义成员来源）。 |
 
+这两个组件的完整策略（检查节奏、`canStop`、`groupSet` 作用域与重连宽限的坑）见
+[房间生命周期](./room-lifecycle.md)。
+
 ## 玩家交互限制
 
 | 组件 | 说明 |
@@ -59,12 +62,3 @@ packages/core/src/gameComponent/**
 | `playerInfoText()` | 用一个 `TextPrimitive` 两行显示“名字 + 血量”，支持动态名字颜色；优先用于同时需要两者的游戏，避免维护两个 primitive。 |
 | `InfoScoreboard` | 侧边栏信息计分板（header / footer / `updateLines`）。 |
 | `TeamScoreBoard` | 侧边栏队伍计分板。 |
-
-## 最近变更
-
-- 新增 `StructureProtector` 与 `StructureBlockMask` / `structureBlockMasks`：把 mcstructure 原图非空气方块扫成只读位图，提供通用地图方块保护（原图不可破坏、覆盖原图的放置回滚），支持 `region` / `allowBreak` / `allowPlace` 接入游戏规则。
-- 新增 `playerInfoText()` 组合预设；名字与血量可共用一个 `TextPrimitive`。
-- `playerNameText().color` 支持 `string | (player) => string`，可按队伍动态着色。
-- 新增 `PlayerTextPrimitive` 与 `playerHealthText` / `playerNameText` 预设；
-  旧的 `PlayerHealthIndicator`（计分板方案）已删除。
-- 新增 `PvpController`（可按玩家/区域范围控制 PvP）与 `FriendlyFireProtector`（友伤保护）。

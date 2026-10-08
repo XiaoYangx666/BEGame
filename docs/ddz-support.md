@@ -1,18 +1,18 @@
-# 斗地主联合开发基线
+# 游戏规则与运行时分离
 
-本文件记录 `feat/ddz-support` 分支的开发边界。斗地主不是作为一个固定版 SAPI-Game 的外部适配项目，而是作为真实项目驱动 SAPI-Game 演进；框架新增能力必须是可复用于其他游戏的通用能力。
+本文以斗地主为例，说明如何划分规则核心、BEGame 运行时与表现层。框架能力应可复用于其他游戏，具体牌局规则与视觉实现由游戏项目持有。
 
 ## 目标
 
-- 斗地主规则与 Minecraft / SAPI-Game 完全解耦，可在普通 TypeScript 环境独立测试。
-- SAPI-Game 负责游戏实例、玩家分配、生命周期、运行时状态、组件、事件和 Runner。
+- 斗地主规则与 Minecraft / BEGame 完全解耦，可在普通 TypeScript 环境独立测试。
+- BEGame 负责游戏实例、玩家分配、生命周期、运行时状态、组件、事件和 Runner。
 - 斗地主表现层独立于规则核心，现有 `visual_controller` 只作为视觉投影，不作为权威牌局状态。
 - 支持同类多实例、多局 Session、脚本重载恢复，并为后续掉线重绑定保留空间。
 
 ## 依赖方向
 
 ```text
-Minecraft / SAPI-Game
+Minecraft / BEGame
         |
         v
 Doudizhu Adapter + Presentation
@@ -24,7 +24,7 @@ DDZ Core (pure TypeScript)
 `DDZ Core` 不允许依赖：
 
 - `@minecraft/server`
-- `sapi-game`
+- `@begame/core`
 - Entity / Player / GameState / GameComponent
 - 动画、音效、Viewer、按钮和 UI 临时状态
 
@@ -98,21 +98,3 @@ DoudizhuGame + tag=table_01
 未声明 `gameType` 的现有游戏仍继续使用 `class.name`，因此不破坏旧项目。显式 `gameType` 必须是非空字符串且不能包含 `:`。
 
 这个标识后续会同时用于 Snapshot 元数据和 Restore Registry，而不是只为斗地主做特判。
-
-## SAPI-Game 预计由斗地主验证的通用能力
-
-以下能力只在真实需求出现并验证后下沉，不提前做棋牌专用抽象：
-
-1. Stable Game Type：已完成第一版，持久化标识不再必须依赖 class name。
-2. Snapshot / Restore：保存和恢复长期 Game Session。
-3. Player Reservation / Rebind：长生命周期游戏的离线与重新绑定能力。
-
-不计划加入 `CardGameEngine`、`PokerGame` 等棋牌专用框架层。
-
-## 当前进度
-
-- 联合开发分支：`feat/ddz-support`。
-- 已同步已确认的 Gitee 最新构建相关变更。
-- 已加入 Stable Game Type。
-- 斗地主现有视觉 Demo 已建立回归基线，Minecraft-facing 文件保持不变。
-- 斗地主纯 Core 已开始实现 Card / Deck / Rules / Round / Match，并保持零 SAPI/Minecraft 依赖。
