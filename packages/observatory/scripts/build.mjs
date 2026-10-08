@@ -30,12 +30,29 @@ const external = [
     /^node:/,
 ];
 
+/**
+ * A missing dependency must fail the build.
+ *
+ * By default rolldown only warns (`UNRESOLVED_IMPORT`) and emits the bundle with
+ * the import left dangling. That is how the browser UI once shipped without
+ * React: the build reported success while `public/build/app.js` referenced a
+ * package that was not installed. Anything not resolved here and not declared
+ * external would break at runtime, so it fails the build instead.
+ */
+function failOnUnresolvedImport(level, log, defaultHandler) {
+    if (log.code === "UNRESOLVED_IMPORT") {
+        throw new Error(`Unresolved import: ${log.message}`);
+    }
+    defaultHandler(level, log);
+}
+
 const serverConfig = defineConfig({
     input: {
         server: resolve(serverRoot, "index.ts"),
         cli: resolve(serverRoot, "cli.ts"),
     },
     external,
+    onLog: failOnUnresolvedImport,
     platform: "node",
     output: {
         dir: resolve(packageRoot, "dist"),
@@ -47,6 +64,7 @@ const serverConfig = defineConfig({
 const appConfig = defineConfig({
     input: { app: resolve(srcRoot, "main.tsx") },
     platform: "browser",
+    onLog: failOnUnresolvedImport,
     // `define` is a transform-level option in rolldown (unlike Vite/Rollup,
     // where it sits at the top level). React reads `process.env.NODE_ENV`, so
     // it must be replaced for the browser bundle.
