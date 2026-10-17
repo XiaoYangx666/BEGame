@@ -54,6 +54,10 @@ const BUILTIN_TITLES = {
     "timer.expired": "计时器到期",
     "timer.cancelled": "计时器取消",
     "debug.message": "调试消息",
+    "tabletop.member.changed": "Tabletop 成员变更",
+    "tabletop.seat.changed": "Tabletop 席位变更",
+    "tabletop.presence.changed": "Tabletop 在线状态",
+    "tabletop.stage.changed": "Tabletop 对局阶段",
 };
 
 const ERROR_TYPES = new Set([
@@ -125,18 +129,23 @@ export function isErrorType(type) {
 }
 
 /**
- * Structural family, decided purely by the event type's namespace. Custom
- * namespaces fall through to `domain`; no game vocabulary is consulted.
+ * Trace family from built-in event namespaces and the BEGame Trace source kind.
+ * Tabletop's named events are first-party integrations and remain recognized
+ * when reading recordings emitted before participation/connection source scopes.
+ * Unknown custom events retain the generic domain fallback.
  * @param {string} type
+ * @param {string} [sourceKind]
  * @returns {import("./types").EventFamily}
  */
-export function eventFamily(type) {
+export function eventFamily(type, sourceKind) {
     if (type === "debug.message" || type.startsWith("debug.")) return "debug";
     if (type.startsWith("game.")) return "game";
     if (type.startsWith("state.")) return "state";
     if (type.startsWith("component.")) return "component";
-    if (type.startsWith("participation.")) return "participation";
-    if (type.startsWith("player.")) return "connection";
+    if (type.startsWith("participation.") || type === "tabletop.member.changed" || type === "tabletop.seat.changed"
+        || sourceKind === "participation") return "participation";
+    if (type.startsWith("player.") || type === "tabletop.presence.changed"
+        || sourceKind === "connection") return "connection";
     if (type.startsWith("disconnect_timeout.")) return "timeout";
     if (
         type.startsWith("runner.") ||
@@ -244,7 +253,7 @@ export function analyzeSession(selected) {
 
     for (let index = 0; index < events.length; index++) {
         const event = events[index];
-        const family = eventFamily(event.type);
+        const family = eventFamily(event.type, event.source.kind);
         const severity = eventSeverity(event.type);
         const subtype = eventSubtype(event);
         const scope = context.eventOwners[index] ?? "session";
