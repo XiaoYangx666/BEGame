@@ -9,10 +9,14 @@ interface Props {
 }
 
 const WATCHED = new Set(["participation", "connection", "timeout"]);
+// Game-independent convention: seat and membership change records belong
+// alongside built-in participation events, not only in the raw stream.
+const isParticipationChange = (type: string) =>
+    type.endsWith(".seat.changed") || type.endsWith(".member.changed");
 
 export function ParticipantsView({ selected, analysis }: Props) {
     const tickOfSequence = new Map(selected.events.map((event) => [event.sequence, event.tick]));
-    const timeline = selected.events.filter((event) => WATCHED.has(eventFamily(event.type)));
+    const timeline = selected.events.filter((event) => WATCHED.has(eventFamily(event.type)) || isParticipationChange(event.type));
 
     return (
         <>
@@ -60,7 +64,7 @@ export function ParticipantsView({ selected, analysis }: Props) {
                                     </span>
                                 </header>
                                 <div className="seat-current">
-                                    {seat.name ?? seat.participantId ?? "空"}
+                                    {seat.name ?? seat.participantId ?? (seat.kind === "bot" ? "人机" : "空")}
                                 </div>
                                 <ol className="seat-history">
                                     {seat.changes.map((change, index) => (
@@ -69,7 +73,7 @@ export function ParticipantsView({ selected, analysis }: Props) {
                                             <span>
                                                 {change.kind === "empty"
                                                     ? "清空"
-                                                    : `${change.name ?? change.participantId ?? "?"} 入座`}
+                                                    : `${change.name ?? change.participantId ?? (change.kind === "bot" ? "人机" : "?")} 入座`}
                                                 {change.kind && change.kind !== "empty"
                                                     ? `（${change.kind}）`
                                                     : ""}
