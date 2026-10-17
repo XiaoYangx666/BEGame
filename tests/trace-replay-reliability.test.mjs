@@ -8,7 +8,7 @@ import {
 function header(id) {
     return {
         sessionId: id, gameType: "replay-fixture", gameKey: id,
-        gameInstanceId: id, startTick: 0, startWallTime: 1,
+        gameInstanceId: id, startTick: 0, startWallTime: Date.now(),
         formatVersion: 1,
     };
 }
