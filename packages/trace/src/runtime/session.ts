@@ -335,8 +335,13 @@ export class TraceScope {
         return this.session !== undefined && !this.session.ended;
     }
 
-    emit<T extends TraceSchemaShape>(schema: TraceEventSchema<T>, payload: TracePayload<T>) {
-        this.session?.emitCustom(schema, payload, this.source);
+    /**
+     * True means the event was encoded into the Trace session's in-memory
+     * buffer. It does NOT guarantee that an external sink persisted the chunk.
+     * False means the session is absent/ended or encoding failed.
+     */
+    emit<T extends TraceSchemaShape>(schema: TraceEventSchema<T>, payload: TracePayload<T>): boolean {
+        return this.session?.emitCustom(schema, payload, this.source) ?? false;
     }
 
     debug(message: string, fields?: Record<string, TraceValue>) {
@@ -529,9 +534,12 @@ export class TraceSession {
         schema: TraceEventSchema<T>,
         payload: TracePayload<T>,
         source: TraceSource = { kind: "game" }
-    ) {
-        if (this._ended) return;
-        this.safe(() => this.emitCustomUnsafe(schema, payload, source));
+    ): boolean {
+        if (this._ended) return false;
+        return this.safe(() => {
+            this.emitCustomUnsafe(schema, payload, source);
+            return true;
+        }) === true;
     }
 
     noteConnection(id: string, name: string | undefined, online: boolean) {
