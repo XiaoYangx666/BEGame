@@ -9,14 +9,9 @@ interface Props {
 }
 
 const WATCHED = new Set(["participation", "connection", "timeout"]);
-// Game-independent convention: seat and membership change records belong
-// alongside built-in participation events, not only in the raw stream.
-const isParticipationChange = (type: string) =>
-    type.endsWith(".seat.changed") || type.endsWith(".member.changed") || type.endsWith(".presence.changed");
-
 export function ParticipantsView({ selected, analysis }: Props) {
     const tickOfSequence = new Map(selected.events.map((event) => [event.sequence, event.tick]));
-    const timeline = selected.events.filter((event) => WATCHED.has(eventFamily(event.type)) || isParticipationChange(event.type));
+    const timeline = selected.events.filter((event) => WATCHED.has(eventFamily(event.type, event.source.kind)));
 
     return (
         <>
@@ -99,7 +94,7 @@ export function ParticipantsView({ selected, analysis }: Props) {
                                     <span className="mono timeline-time">
                                         {fmtRel(analysis.startTick, event.tick)}
                                     </span>
-                                    <FamilyBadge family={eventFamily(event.type) as EventFamily} />
+                                    <FamilyBadge family={eventFamily(event.type, event.source.kind) as EventFamily} />
                                     <span className="timeline-title">
                                         {title}
                                         {title !== event.type ? <code className="raw-type">{event.type}</code> : null}
