@@ -221,12 +221,18 @@ export class TraceHistoryStore implements TraceSink {
         if (!this.activeSessions.has(end.sessionId)) return;
         try {
             const meta = this.requireMeta(end.sessionId);
-            meta.status = end.status;
-            meta.end = end;
-            meta.chunkCount = end.chunkCount;
-            meta.eventCount = end.eventCount;
+            // A failed chunk write must not become a completed recording
+            // just because TraceSession emitted a footer. Preserve the real
+            // stored counts; no end metadata means read()/toBytes() must reject.
+            const complete = meta.chunkCount === end.chunkCount
+                && meta.eventCount === end.eventCount;
+            meta.status = complete ? end.status : "interrupted";
+            meta.end = complete ? end : undefined;
             meta.lastTick = end.endTick;
             this.writeMeta(meta);
+            if (!complete) this.report(new Error(
+                `Incomplete Trace storage for ${end.sessionId}: stored ${meta.chunkCount}/${end.chunkCount} chunks, ${meta.eventCount}/${end.eventCount} events`
+            ));
         } finally {
             this.activeSessions.delete(end.sessionId);
         }
