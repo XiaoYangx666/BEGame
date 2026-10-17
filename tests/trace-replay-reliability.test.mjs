@@ -37,7 +37,7 @@ function storageWithFailure() {
         storage: {
             kv: {
                 set(key, value) {
-                    if (throwChunks && key.endsWith(".chunk.0")) throw Error("simulated DP write failure");
+                    if (throwChunks && key.endsWith(".0")) throw Error("simulated DP write failure");
                     if (value === undefined) values.delete(key);
                     else values.set(key, value);
                 },
