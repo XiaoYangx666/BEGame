@@ -79,8 +79,8 @@ function chunk(sessionId, index) {
     return {
         sessionId,
         index,
-        firstSequence: index * 10,
-        lastSequence: index * 10 + 9,
+        firstSequence: index * 10 + 1,
+        lastSequence: index * 10 + 10,
         startTick: index * 10,
         endTick: index * 10 + 10,
         eventCount: 10,
