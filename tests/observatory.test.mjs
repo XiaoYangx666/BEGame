@@ -211,3 +211,55 @@ test("observatory treats namespaced rejected events as diagnostic signals", () =
         { eventIndex: 0, nodeKey: "session", type: "game.transition.rejected" },
     ]);
 });
+
+test("observatory identifies players and named seats from generic Tabletop events", () => {
+    const header = {
+        sessionId: "named-seats", formatVersion: 1, gameType: "xiangqi",
+        gameKey: "xiangqi:1", gameInstanceId: "named-seats",
+        startTick: 0, startWallTime: 0,
+    };
+    const end = {
+        sessionId: "named-seats", status: "completed", endTick: 30,
+        endWallTime: 1500, eventCount: 8, chunkCount: 1,
+    };
+    const events = [
+        event(1, 1, "tabletop.stage.changed", { kind: "game" }, { stage: "lobby", revision: 0 }),
+        event(2, 2, "tabletop.seat.changed", { kind: "game" }, { seat: "red", kind: "empty", revision: 0 }),
+        event(3, 2, "tabletop.seat.changed", { kind: "game" }, { seat: "black", kind: "empty", revision: 0 }),
+        event(4, 3, "tabletop.member.changed", { kind: "game" }, { player: "alice", status: "joined", revision: 1 }),
+        event(5, 4, "tabletop.seat.changed", { kind: "game" }, { seat: "red", kind: "human", participantId: "alice", name: "Alice", revision: 1 }),
+        event(6, 5, "tabletop.seat.changed", { kind: "game" }, { seat: "black", kind: "bot", revision: 2 }),
+        event(7, 6, "tabletop.seat.changed", { kind: "game" }, { seat: "red", kind: "empty", revision: 3 }),
+        event(8, 7, "tabletop.member.changed", { kind: "game" }, { player: "alice", status: "left", revision: 3 }),
+    ];
+    const context = buildContext({ header, end, events });
+    expect(context.players).toHaveLength(1);
+    expect(context.players[0].id).toBe("alice");
+    expect(context.players[0].name).toBe("Alice");
+    expect(context.players[0].seats).toEqual(["red"]);
+    expect(context.seats.map(s => s.seat)).toEqual(["black", "red"]);
+    const red = context.seats.find(s => s.seat === "red");
+    expect(red.kind).toBe("empty");
+    expect(red.name).toBeUndefined();
+    expect(red.participantId).toBeUndefined();
+    expect(red.changes).toHaveLength(3);
+    const black = context.seats.find(s => s.seat === "black");
+    expect(black.kind).toBe("bot");
+    expect(black.participantId).toBeUndefined();
+    expect(context.eventOwners).toEqual(Array(8).fill("session"));
+    expect(context.nodes).toHaveLength(1);
+});
+
+test("observatory preserves numbered seats and clears old occupant on seat reset", () => {
+    const header = { startTick: 0 };
+    const end = { endTick: 5, eventCount: 3 };
+    const events = [
+        event(1, 1, "doudizhu.seat.changed", { kind: "game" }, { seat: 2, kind: "human", participantId: "alice", name: "Alice" }),
+        event(2, 2, "doudizhu.seat.changed", { kind: "game" }, { seat: 2, kind: "empty" }),
+        event(3, 3, "doudizhu.seat.changed", { kind: "game" }, { seat: 10, kind: "bot" }),
+    ];
+    const context = buildContext({ header, end, events });
+    expect(context.seats.map(s => s.seat)).toEqual([2, 10]);
+    expect(context.seats[0].participantId).toBeUndefined();
+    expect(context.seats[0].name).toBeUndefined();
+});
