@@ -56,7 +56,7 @@ export function StreamView({
         const needle = search.trim().toLowerCase();
         const list: Row[] = [];
         selected.events.forEach((event, index) => {
-            const family = eventFamily(event.type);
+            const family = eventFamily(event.type, event.source.kind);
             if (families.size > 0 && !families.has(family)) return;
             if (!showInternal && isInternalEvent(event.type)) return;
             const subtype = eventSubtype(event);
@@ -215,7 +215,7 @@ function StreamRow({
     startTick: number;
     owner: string;
 }) {
-    const family = eventFamily(event.type) as EventFamily;
+    const family = eventFamily(event.type, event.source.kind) as EventFamily;
     const severity = eventSeverity(event.type);
     const title = eventTitle(event);
     const summary = summarizeEvent(event);
