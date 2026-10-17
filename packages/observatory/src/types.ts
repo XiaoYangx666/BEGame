@@ -76,7 +76,7 @@ export interface ContextNode {
 export interface PlayerEntry {
     id: string;
     name?: string;
-    seats: number[];
+    seats: (string | number)[];
     firstSequence: number;
     lastSequence: number;
 }
@@ -90,7 +90,7 @@ export interface SeatChange {
 }
 
 export interface SeatEntry {
-    seat: number;
+    seat: string | number;
     name?: string;
     kind?: string;
     participantId?: string;
