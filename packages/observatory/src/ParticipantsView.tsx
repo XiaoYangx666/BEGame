@@ -12,7 +12,7 @@ const WATCHED = new Set(["participation", "connection", "timeout"]);
 // Game-independent convention: seat and membership change records belong
 // alongside built-in participation events, not only in the raw stream.
 const isParticipationChange = (type: string) =>
-    type.endsWith(".seat.changed") || type.endsWith(".member.changed");
+    type.endsWith(".seat.changed") || type.endsWith(".member.changed") || type.endsWith(".presence.changed");
 
 export function ParticipantsView({ selected, analysis }: Props) {
     const tickOfSequence = new Map(selected.events.map((event) => [event.sequence, event.tick]));
