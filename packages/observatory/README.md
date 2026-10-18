@@ -97,6 +97,8 @@ bgobs --connect --pack ddz
 | ingest token | `--ingest-token` | `BEGAME_INGEST_TOKEN` | — |
 | 归档目录 | `--archive-dir` | `BEGAME_ARCHIVE_DIR` | 包内 `data/archive` |
 | 关闭归档 | `--no-archive` | — | 归档默认开启 |
+| 后台日志 | `--log` | `BEGAME_OBSERVATORY_LOG` | `./observatory.log` |
+| pid 文件 | `--pid-file` | `BEGAME_OBSERVATORY_PID_FILE` | `./observatory.pid` |
 
 命令行传了 `--pack` 就**替换**（而不是追加）配置文件里的列表。
 
@@ -109,6 +111,28 @@ bgobs --connect --pack ddz
 - `--ingest` —— HTTP 上传 sink（`POST /api/ingest`）。
 
 三者中 HTTP 工作台默认开启，可用 `--no-http` 关闭。
+
+## 后台常驻
+
+BDS 侧的桥连续失败到上限后会暂停、只能靠重载世界恢复，因此 Observatory 通常要在
+BDS 之前启动并一直保持运行。直接让 CLI 脱离终端即可，不需要额外的守护工具：
+
+```bash
+bgobs --net --daemon     # 后台启动，命令立即返回
+bgobs --status           # 查看 pid / 启动时间 / 日志（运行中退出码 0）
+bgobs --stop             # 发送 SIGTERM，优雅退出
+```
+
+- `--log <path>` 后台日志（默认 `./observatory.log`），`--pid-file <path>` 记录 pid
+  （默认 `./observatory.pid`）；
+- 已在运行时再次 `--daemon` 会被拒绝，不会启动第二个实例；
+- pid 文件对应的进程已退出时，`--status` / `--stop` 会识别为陈旧记录并清理；
+- `--stop` 的 SIGTERM 处理器会先停归档轮询、关桥，再关 HTTP，最后退出；
+- `--daemon` 只保证“已派生并记录 pid”：子进程若立即失败（例如端口被占用），
+  原因写在日志文件里。
+
+开机自启和崩溃重启属于系统层（systemd `Restart=always`、计划任务、`pm2` / `nssm`），
+Observatory 自身只实现“常驻”。
 
 ## 断连后的持久化（本地归档）
 

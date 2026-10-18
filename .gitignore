@@ -4,6 +4,7 @@ cache
 dist
 *.tgz
 *.log
+*.pid
 packages/observatory/public/build
 traces/
 packages/observatory/data

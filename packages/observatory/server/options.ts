@@ -11,6 +11,7 @@
  * Precedence, highest first: command line, environment, config file, defaults.
  */
 import type { ConnectTarget, ObservatoryConfigFile } from "./config";
+import { scanDaemonFlags } from "./daemon";
 
 export interface ServerOptions {
     /** Serve the workbench UI and the HTTP API. */
@@ -72,6 +73,15 @@ export const HELP_TEXT = `BEGame Observatory
   --no-http             不启动 HTTP 工作台，仅运行显式开启的桥
   -h, --help            显示本帮助
 
+后台常驻：
+  --daemon              脱离终端后台运行，日志写入 --log
+  --log <path>          后台日志文件（默认 ./observatory.log，
+                        环境变量 BEGAME_OBSERVATORY_LOG）
+  --pid-file <path>     pid 文件（默认 ./observatory.pid，
+                        环境变量 BEGAME_OBSERVATORY_PID_FILE）
+  --status              查看后台进程是否在运行（在运行时退出码 0）
+  --stop                停止后台进程（发送 SIGTERM）
+
 /connect 需要知道每个包的命令 namespace（Bedrock 规定一个包只能用一个
 namespace，所以 ddz 包的命令是 ddz:tracelist，而不是 begame:tracelist）。
 用配置文件声明：
@@ -88,6 +98,8 @@ namespace，所以 ddz 包的命令是 ddz:tracelist，而不是 begame:tracelis
   bgobs --connect --pack ddz        # UI + /connect 桥，查询 ddz 包
   bgobs --net --ingest              # UI + BDS 桥 + 上传 sink
   bgobs --no-http --net             # 只运行 BDS 桥
+  bgobs --net --daemon              # 后台常驻运行 BDS 桥
+  bgobs --status / bgobs --stop     # 查看 / 停止后台进程
 `;
 
 const CONNECT_PORT_DEFAULT = 18789;
@@ -121,6 +133,9 @@ function packTarget(raw: string, warnings: string[]): ConnectTarget | undefined 
  * Parses argv (without `node` / script), environment and an optional config
  * file. Environment variables may supply values, but never turn a listener on
  * by themselves; only the command line (or a config file) does that.
+ *
+ * Background-running flags (`--daemon`, `--stop`, ...) are stripped first and
+ * owned by `./daemon`; this parser only ever describes a foreground server.
  */
 export function parseServerOptions(
     argv: readonly string[],
@@ -128,6 +143,11 @@ export function parseServerOptions(
     config: ObservatoryConfigFile = {}
 ): ParseResult {
     const warnings: string[] = [];
+    // Background-running flags are the CLI entry's concern; strip them so this
+    // parser keeps describing one foreground server process only.
+    const scanned = scanDaemonFlags(argv);
+    if (scanned.error !== undefined) return { ok: false, error: scanned.error };
+    const args = scanned.rest;
     const options: ServerOptions = {
         http: true,
         host: env.HOST ?? config.host ?? "127.0.0.1",
@@ -176,10 +196,10 @@ export function parseServerOptions(
     // the configured list: the command line is the higher-precedence source.
     let cliTargets: ConnectTarget[] | undefined;
 
-    for (let index = 0; index < argv.length; index++) {
-        const arg = argv[index];
+    for (let index = 0; index < args.length; index++) {
+        const arg = args[index];
         const next = (): string | undefined => {
-            const value = argv[++index];
+            const value = args[++index];
             return value;
         };
         switch (arg) {

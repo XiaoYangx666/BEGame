@@ -53,6 +53,31 @@ function start(options: ServerOptions) {
         : undefined;
     archiver?.start();
 
+    // Ctrl+C and `bgobs --stop` (SIGTERM) both come through here, so the
+    // archive finishes its in-flight write and the listening sockets close
+    // before the process exits. Registered before the possible `--no-http`
+    // return so a bridge-only process is stoppable too.
+    let server: ReturnType<typeof serve> | undefined;
+    let closing = false;
+    const shutdown = (signal: string) => {
+        if (closing) return;
+        closing = true;
+        console.log(`\n收到 ${signal}，正在停止…`);
+        archiver?.stop();
+        net?.close();
+        bridge?.close();
+        if (!server) {
+            process.exit(0);
+            return;
+        }
+        server.close(() => process.exit(0));
+        // A stuck connection must not keep the process alive forever; the
+        // timeout is unref'd so a clean close exits immediately.
+        setTimeout(() => process.exit(0), 2000).unref();
+    };
+    process.on("SIGINT", () => shutdown("SIGINT"));
+    process.on("SIGTERM", () => shutdown("SIGTERM"));
+
     if (!options.http) {
         console.log("HTTP 工作台未启用（--no-http）。");
         return;
@@ -62,7 +87,7 @@ function start(options: ServerOptions) {
         console.warn("前端 bundle 不存在，请先运行 npm run build（npm run observatory 会自动构建）。");
     }
 
-    const server = serve(
+    const httpServer = serve(
         {
             fetch: createApp(bridge, ingest, net, archive).fetch,
             port: options.port,
@@ -95,7 +120,10 @@ function start(options: ServerOptions) {
         }
     );
 
-    server.on("error", (error: NodeJS.ErrnoException) => {
+    // Publish only after `serve` returns, so the shutdown handler can close it.
+    server = httpServer;
+
+    httpServer.on("error", (error: NodeJS.ErrnoException) => {
         if (error.code === "EADDRINUSE") {
             console.error(
                 `端口 ${options.port} 已被占用，可用 --port <n> 或 PORT=<n> 换一个端口。`

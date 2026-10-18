@@ -121,6 +121,29 @@ npm run observatory:connect    # 额外开启 /connect 桥（与 --net 互斥）
 
 `--connect` 与 `--net` 不能同时开启；同时给出会报错退出。`--no-http` 可以只跑桥。
 
+### 后台常驻
+
+BDS 侧的桥在连续失败达到上限后会暂停、只能靠重载世界恢复，所以 Observatory 通常
+应在 BDS 之前就启动并一直保持运行。CLI 内建后台运行，不需要额外的守护工具：
+
+```shell
+bgobs --net --daemon            # 脱离终端运行，命令立即返回
+bgobs --status                  # 查看 pid / 启动时间 / 日志
+bgobs --stop                    # 发送 SIGTERM，优雅退出
+```
+
+- `--log <path>`：后台日志文件，默认 `./observatory.log`
+  （`BEGAME_OBSERVATORY_LOG`）；
+- `--pid-file <path>`：pid 文件，默认 `./observatory.pid`
+  （`BEGAME_OBSERVATORY_PID_FILE`）；
+- 已经在运行时再次 `--daemon` 会拒绝启动（不会产生第二个实例）；pid 文件对应
+  的进程已不存在时，`--status` / `--stop` 会把它当作陈旧记录清理掉；
+- `--stop` 触发的 SIGTERM 处理器会先停归档轮询、关闭两个桥，再关闭 HTTP，最后退出；
+- `--status` 仅在进程存活时返回退出码 0，便于脚本判断。
+
+开机自启与崩溃重启请交给系统层（systemd 的 `Restart=always`、Windows 计划任务、
+`pm2` / `nssm` 等）：Observatory 只负责“常驻”，不实现守护与重启策略。
+
 ### 本地归档（断连后仍在）
 
 net / connect 桥只是实时代理，会话存在游戏侧；游戏一断连，工作台就列不出它们。
