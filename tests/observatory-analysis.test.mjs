@@ -21,7 +21,7 @@ function sampleTrace() {
     return readFileSync(new URL("./fixtures/observatory-sample.begtrace", import.meta.url));
 }
 
-test("analysis is generic: families come from type namespaces only", () => {
+test("analysis classifies builtins, native sources and first-party Tabletop events", () => {
     expect(eventFamily("game.created")).toBe("game");
     expect(eventFamily("state.push")).toBe("state");
     expect(eventFamily("component.attached")).toBe("component");
@@ -32,6 +32,14 @@ test("analysis is generic: families come from type namespaces only", () => {
     expect(eventFamily("debug.message")).toBe("debug");
     expect(eventFamily("anything.custom")).toBe("domain");
     expect(eventFamily("plain")).toBe("domain");
+    expect(eventFamily("tabletop.member.changed")).toBe("participation");
+    expect(eventFamily("tabletop.seat.changed")).toBe("participation");
+    expect(eventFamily("tabletop.presence.changed")).toBe("connection");
+    expect(eventFamily("tabletop.stage.changed")).toBe("domain");
+    expect(eventFamily("any.other", "participation")).toBe("participation");
+    expect(eventFamily("any.other", "connection")).toBe("connection");
+    // An unrelated game's similarly named event must not be hijacked.
+    expect(eventFamily("other.seat.changed", "game")).toBe("domain");
 });
 
 test("severity and internal classification are namespace-based", () => {

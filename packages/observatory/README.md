@@ -123,6 +123,21 @@ bgobs --connect --pack ddz
 - 显式删除（工作台 `×`）或「清空已完成」会连同归档一起删掉，否则记录会立刻「复活」。
 - 用 `--no-archive` 关闭；`--archive-dir <path>` / `BEGAME_ARCHIVE_DIR` 换目录。
 
+## BEGame Tabletop 原生分析
+
+Observatory 对 **BEGame Trace 原生事件**和同系列的 **Tabletop 结构化会话事件**
+提供直接分析，其他游戏的自定义事件仍按通用事件展示，不需要特殊适配。
+
+- `tabletop.member.changed` / `tabletop.seat.changed` 归为「参与」；
+  `tabletop.presence.changed` 归为「连接」，这几类事件也会出现在参与者时间线。
+- 新版 Tabletop 使用 Trace 的 `source.kind = participation / connection`；
+  Observatory 也按来源分类。为了读取早期的 Tabletop 录制，以上三个**明确事件类型**
+  即使来源是 `game` 也能正确归类；不根据任意 `.seat.changed` 后缀推断业务含义。
+- 玩家记录来自类型化 `player` 和 `participantId`；席位支持数字与字符串 ID，
+  空席变更会清除当前占用者，但保留历史。
+- `eventOwners` 代表 BEGame 状态栈的事件归属，没有状态栈的会话自然归属于
+  `session`；这与是否记录玩家/席位无关。
+
 ## 从源码构建
 
 ```bash

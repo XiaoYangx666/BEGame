@@ -279,7 +279,14 @@ export function buildContext(session) {
             }
         }
 
-        const seat = typeof payload.seat === "number" ? payload.seat : undefined;
+        // Seat ids are game-defined: both numeric (cards) and named (chess)
+        // seats are valid. Never coerce a named id to a number.
+        const seat =
+            typeof payload.seat === "number" && Number.isFinite(payload.seat)
+                ? payload.seat
+                : typeof payload.seat === "string" && payload.seat.length > 0
+                  ? payload.seat
+                  : undefined;
         if (typeof payload.player === "string") {
             touchPlayer(payload.player, undefined, event.sequence, seat);
         }
@@ -303,10 +310,16 @@ export function buildContext(session) {
                 };
                 seats.set(seat, entry);
             }
-            if (payload.name !== undefined) entry.name = String(payload.name);
-            if (payload.kind !== undefined) entry.kind = String(payload.kind);
-            if (payload.participantId !== undefined) {
-                entry.participantId = String(payload.participantId);
+            // A full seat change replaces its occupant. In particular,
+            // clearing a seat must not keep the previous player's name/ID.
+            if (payload.kind !== undefined) {
+                entry.kind = String(payload.kind);
+                entry.name = typeof payload.name === "string" ? payload.name : undefined;
+                entry.participantId =
+                    typeof payload.participantId === "string" ? payload.participantId : undefined;
+            } else {
+                if (payload.name !== undefined) entry.name = String(payload.name);
+                if (payload.participantId !== undefined) entry.participantId = String(payload.participantId);
             }
             entry.lastSequence = event.sequence;
             entry.changes.push({
@@ -325,7 +338,11 @@ export function buildContext(session) {
         players: [...players.values()].sort(
             (a, b) => a.firstSequence - b.firstSequence
         ),
-        seats: [...seats.values()].sort((a, b) => a.seat - b.seat),
+        seats: [...seats.values()].sort((a, b) =>
+            typeof a.seat === "number" && typeof b.seat === "number"
+                ? a.seat - b.seat
+                : String(a.seat).localeCompare(String(b.seat), undefined, { numeric: true })
+        ),
         errors,
     };
 }

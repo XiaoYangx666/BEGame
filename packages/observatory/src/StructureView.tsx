@@ -27,15 +27,20 @@ export function StructureView({ analysis }: Props) {
                 {!root ? (
                     <Empty>没有状态事件。</Empty>
                 ) : (
-                    <div className="tree">
-                        <TreeRow
-                            node={root}
-                            children={children}
-                            analysis={analysis}
-                            span={span}
-                            visited={new Set()}
-                        />
-                    </div>
+                    <>
+                        {analysis.stateTree.length === 1 ? (
+                            <p>此录制未包含状态栈生命周期，全部事件归属会话根节点；玩家和席位信息请查看“参与者”。</p>
+                        ) : null}
+                        <div className="tree">
+                            <TreeRow
+                                node={root}
+                                children={children}
+                                analysis={analysis}
+                                span={span}
+                                visited={new Set()}
+                            />
+                        </div>
+                    </>
                 )}
             </Panel>
 

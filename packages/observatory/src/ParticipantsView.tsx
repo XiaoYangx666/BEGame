@@ -9,10 +9,9 @@ interface Props {
 }
 
 const WATCHED = new Set(["participation", "connection", "timeout"]);
-
 export function ParticipantsView({ selected, analysis }: Props) {
     const tickOfSequence = new Map(selected.events.map((event) => [event.sequence, event.tick]));
-    const timeline = selected.events.filter((event) => WATCHED.has(eventFamily(event.type)));
+    const timeline = selected.events.filter((event) => WATCHED.has(eventFamily(event.type, event.source.kind)));
 
     return (
         <>
@@ -60,7 +59,7 @@ export function ParticipantsView({ selected, analysis }: Props) {
                                     </span>
                                 </header>
                                 <div className="seat-current">
-                                    {seat.name ?? seat.participantId ?? "空"}
+                                    {seat.name ?? seat.participantId ?? (seat.kind === "bot" ? "人机" : "空")}
                                 </div>
                                 <ol className="seat-history">
                                     {seat.changes.map((change, index) => (
@@ -69,7 +68,7 @@ export function ParticipantsView({ selected, analysis }: Props) {
                                             <span>
                                                 {change.kind === "empty"
                                                     ? "清空"
-                                                    : `${change.name ?? change.participantId ?? "?"} 入座`}
+                                                    : `${change.name ?? change.participantId ?? (change.kind === "bot" ? "人机" : "?")} 入座`}
                                                 {change.kind && change.kind !== "empty"
                                                     ? `（${change.kind}）`
                                                     : ""}
@@ -95,7 +94,7 @@ export function ParticipantsView({ selected, analysis }: Props) {
                                     <span className="mono timeline-time">
                                         {fmtRel(analysis.startTick, event.tick)}
                                     </span>
-                                    <FamilyBadge family={eventFamily(event.type) as EventFamily} />
+                                    <FamilyBadge family={eventFamily(event.type, event.source.kind) as EventFamily} />
                                     <span className="timeline-title">
                                         {title}
                                         {title !== event.type ? <code className="raw-type">{event.type}</code> : null}
