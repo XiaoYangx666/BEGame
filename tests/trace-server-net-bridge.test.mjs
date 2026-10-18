@@ -197,3 +197,54 @@ test("store toggling is reflected in status", async () => {
     bridge.stop();
     void sessionId;
 });
+
+test("a dropped socket reconnects after the backoff delay", async () => {
+    const { trace } = makeTrace();
+    const bridge = createServerNetTraceBridge({
+        url: URL,
+        trace,
+        packId: "probe",
+        reconnectTicks: 20,
+        onError: () => undefined,
+    });
+    bridge.start();
+    await flush();
+    expect(connectionAttempts).toHaveLength(1);
+
+    sockets.at(-1).drop();
+    await flush();
+    expect(bridge.connected).toBe(false);
+
+    await system.advanceTicks(19);
+    await flush();
+    expect(connectionAttempts).toHaveLength(1); // still inside the backoff window
+
+    await system.advanceTicks(1);
+    await flush();
+    expect(connectionAttempts).toHaveLength(2);
+    expect(bridge.connected).toBe(true);
+    bridge.stop();
+});
+
+test("stop() cancels a scheduled reconnect without leaking a timer", async () => {
+    const { trace } = makeTrace();
+    connectFailures.push(new Error("down"));
+    const bridge = createServerNetTraceBridge({
+        url: URL,
+        trace,
+        packId: "probe",
+        reconnectTicks: 50,
+        onError: () => undefined,
+    });
+    bridge.start();
+    await flush();
+    expect(connectionAttempts).toHaveLength(1);
+    expect(system.runs.size).toBeGreaterThan(0); // a reconnect is scheduled
+
+    bridge.stop();
+    expect(system.runs.size).toBe(0); // and cancelled
+
+    await system.advanceTicks(10_000);
+    await flush();
+    expect(connectionAttempts).toHaveLength(1); // nothing fires after stop
+});
