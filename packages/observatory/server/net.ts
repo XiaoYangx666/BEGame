@@ -34,6 +34,17 @@ interface Pending {
     timer: ReturnType<typeof setTimeout>;
 }
 
+/** Last listing received from one pack, keyed by its `packId`. */
+interface SourceCache {
+    /** Revision the cached sessions belong to; absent for legacy packs. */
+    revision?: number;
+    /** Sessions by id, merged from full and delta replies. */
+    sessions: Map<string, StoredTraceSummary>;
+    /** Sorted view of {@link sessions}, invalidated after every merge. */
+    ordered?: StoredTraceSummary[];
+    store?: TraceNetStoreStatus;
+}
+
 interface Connection {
     readonly id: string;
     readonly client: RawWebSocketConnection;
@@ -67,6 +78,13 @@ export class TraceNetBridge {
     private readonly ready = new Map<string, Connection>();
     /** All open connections, including ones that have not sent `ready` yet. */
     private readonly connections = new Set<Connection>();
+    /**
+     * Listing cache per pack. A revision match lets a poll cost one tiny
+     * `unchanged` round trip instead of the full session array.
+     */
+    private readonly cache = new Map<string, SourceCache>();
+    /** Coalesces concurrent pollers (workbench + archiver) per connection. */
+    private readonly inflight = new Map<string, Promise<TraceNetSourceSessions>>();
 
     constructor(
         readonly port = 18790,
@@ -106,31 +124,141 @@ export class TraceNetBridge {
         }
         this.connections.clear();
         this.ready.clear();
+        this.cache.clear();
+        this.inflight.clear();
         this.server.close();
     }
 
     /** Queries every connected pack; a failing source reports its error inline. */
     async listAll(): Promise<TraceNetSourceSessions[]> {
         return Promise.all(
-            [...this.ready.values()].map(async (connection) => {
-                const info = this.sourceInfo(connection);
-                try {
-                    const [list, status] = await Promise.all([
-                        this.request(connection, { op: "list" }),
-                        this.request(connection, { op: "status" }).catch(() => undefined),
-                    ]);
-                    if (!list.ok) throw new Error(list.error);
-                    if (!("sessions" in list.result)) throw new Error("无效的 list 响应");
-                    const store =
-                        status?.ok && isStoreStatus(status.result)
-                            ? status.result
-                            : info.store;
-                    return { ...info, store, sessions: list.result.sessions };
-                } catch (error) {
-                    return { ...info, sessions: [], error: (error as Error).message };
-                }
-            })
+            [...this.ready.values()].map((connection) => this.listSource(connection))
         );
+    }
+
+    /**
+     * One pack's listing, sharing an in-flight request with any concurrent
+     * caller so a single polling tick cannot send the same `list` twice.
+     */
+    private listSource(connection: Connection): Promise<TraceNetSourceSessions> {
+        const existing = this.inflight.get(connection.id);
+        if (existing) return existing;
+        const pending = this.fetchSource(connection).finally(() => {
+            if (this.inflight.get(connection.id) === pending) {
+                this.inflight.delete(connection.id);
+            }
+        });
+        this.inflight.set(connection.id, pending);
+        return pending;
+    }
+
+    private async fetchSource(
+        connection: Connection
+    ): Promise<TraceNetSourceSessions> {
+        const info = this.sourceInfo(connection);
+        try {
+            const cache = this.cacheFor(connection);
+            const since = cache.revision;
+            const list = await this.request(
+                connection,
+                since === undefined ? { op: "list" } : { op: "list", since }
+            );
+            if (!list.ok) throw new Error(list.error);
+
+            if (isUnchangedList(list.result)) {
+                // An `unchanged` reply is only meaningful for the revision we
+                // actually hold; anything else means the pack reset (reload) or
+                // answered a request we did not send.
+                if (since === undefined || since !== list.result.revision) {
+                    throw new Error("无效的 unchanged 响应");
+                }
+                const store = isStoreStatus(list.result.store)
+                    ? list.result.store
+                    : (cache.store ?? info.store);
+                if (this.isCurrent(connection)) {
+                    cache.store = store;
+                    connection.ready!.store = store;
+                }
+                return { ...info, store, sessions: orderedSessions(cache) };
+            }
+
+            if (!("sessions" in list.result) || !Array.isArray(list.result.sessions)) {
+                throw new Error("无效的 list 响应");
+            }
+            if (
+                list.result.full !== undefined &&
+                typeof list.result.full !== "boolean"
+            ) {
+                throw new Error("无效的 full 响应");
+            }
+            if (list.result.removed !== undefined) {
+                if (
+                    !Array.isArray(list.result.removed) ||
+                    !list.result.removed.every((id) => typeof id === "string")
+                ) {
+                    throw new Error("无效的 removed 响应");
+                }
+            }
+            const delta = list.result.full === false;
+            if (delta && since === undefined) {
+                throw new Error("无效的增量 list 响应");
+            }
+            const incoming = list.result.sessions;
+            const removed = list.result.removed ?? [];
+
+            // New packs answer `list` with store status too, so the old extra
+            // `status` round trip is no longer needed on every poll.
+            let store: TraceNetStoreStatus;
+            if (isStoreStatus(list.result.store)) {
+                store = list.result.store;
+            } else {
+                const status = await this.request(connection, { op: "status" });
+                if (!status.ok) throw new Error(status.error);
+                if (!isStoreStatus(status.result)) throw new Error("无效的 status 响应");
+                store = status.result;
+            }
+
+            const merged = new Map(cache.sessions);
+            if (delta) {
+                for (const entry of incoming) merged.set(entry.sessionId, entry);
+                for (const sessionId of removed) merged.delete(sessionId);
+            } else {
+                // A full reply (including a legacy pack with no `full` field)
+                // replaces the cache, so sessions deleted while we were away
+                // disappear too.
+                merged.clear();
+                for (const entry of incoming) merged.set(entry.sessionId, entry);
+            }
+            const sessions = sortSummaries(merged);
+            if (this.isCurrent(connection)) {
+                cache.sessions = merged;
+                cache.ordered = sessions;
+                cache.store = store;
+                cache.revision =
+                    typeof list.result.revision === "number"
+                        ? list.result.revision
+                        : undefined;
+                connection.ready!.store = store;
+            }
+            return { ...info, store, sessions };
+        } catch (error) {
+            return { ...info, sessions: [], error: (error as Error).message };
+        }
+    }
+
+    private cacheFor(connection: Connection): SourceCache {
+        const source = connection.ready!.packId;
+        let cache = this.cache.get(source);
+        if (!cache) {
+            cache = { sessions: new Map() };
+            this.cache.set(source, cache);
+        }
+        return cache;
+    }
+
+    /** False once this connection was replaced by a newer handshake. */
+    private isCurrent(connection: Connection): boolean {
+        return this.ready.get(connection.ready?.packId ?? "") === connection;
     }
 
     async download(source: string, sessionId: string): Promise<Buffer> {
@@ -196,6 +324,8 @@ export class TraceNetBridge {
         if (!reply.ok) throw new Error(reply.error);
         const store = reply.result as TraceNetStoreStatus;
         if (connection.ready) connection.ready.store = store;
+        const cache = this.cache.get(connection.ready!.packId);
+        if (cache) cache.store = store;
         return store;
     }
 
@@ -205,6 +335,8 @@ export class TraceNetBridge {
         if (!reply.ok) throw new Error(reply.error);
         const store = reply.result as TraceNetStoreStatus;
         if (connection.ready) connection.ready.store = store;
+        const cache = this.cache.get(connection.ready!.packId);
+        if (cache) cache.store = store;
         return store;
     }
 
@@ -256,6 +388,7 @@ export class TraceNetBridge {
             const source = connection.ready.packId;
             if (this.ready.get(source) === connection) {
                 this.ready.delete(source);
+                this.cache.delete(source);
                 console.log(`BDS trace net: ${source} 已断开`);
             }
         }
@@ -298,6 +431,10 @@ export class TraceNetBridge {
                 ...(reply.packName === undefined ? {} : { packName: reply.packName }),
                 store: reply.store,
             };
+            // A re-handshake may come from a reloaded script whose revision
+            // restarted at zero; the old cached sessions/revision must not be
+            // reused or the first `since` poll could be mistaken for current.
+            this.cache.delete(packId);
             this.ready.set(packId, connection);
             console.log(
                 `BDS trace net: ${packId} 已连接${reply.packName ? ` (${reply.packName})` : ""}`
@@ -333,4 +470,31 @@ function isStoreStatus(value: unknown): value is TraceNetStoreStatus {
         typeof (value as TraceNetStoreStatus).enabled === "boolean" &&
         typeof (value as TraceNetStoreStatus).count === "number"
     );
+}
+
+function isUnchangedList(
+    value: unknown
+): value is { unchanged: true; revision: number; store: TraceNetStoreStatus } {
+    return (
+        typeof value === "object" &&
+        value !== null &&
+        (value as { unchanged?: unknown }).unchanged === true &&
+        typeof (value as { revision?: unknown }).revision === "number"
+    );
+}
+
+function sortSummaries(
+    sessions: ReadonlyMap<string, StoredTraceSummary>
+): StoredTraceSummary[] {
+    return [...sessions.values()].sort(
+        (a, b) =>
+            b.startWallTime - a.startWallTime ||
+            b.sessionId.localeCompare(a.sessionId)
+    );
+}
+
+/** Sorted sessions for a cache, rebuilt only after a merge. */
+function orderedSessions(cache: SourceCache): StoredTraceSummary[] {
+    if (!cache.ordered) cache.ordered = sortSummaries(cache.sessions);
+    return cache.ordered;
 }

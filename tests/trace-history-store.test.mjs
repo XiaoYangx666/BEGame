@@ -304,3 +304,131 @@ test("list() reuses one snapshot until a store write invalidates it", () => {
     // Cached snapshots are independent arrays, not aliases of the cache.
     expect(first.map((entry) => entry.sessionId)).toEqual(["s1"]);
 });
+
+test("revision advances only when the listing is invalidated", () => {
+    const { storage } = testStorage();
+    const store = new TraceHistoryStore(storage).enable();
+
+    const start = store.revision;
+    writeSession(store, "s1");
+    const afterWrite = store.revision;
+    expect(afterWrite).toBeGreaterThan(start);
+
+    // Persisting the enabled flag is not a listing change.
+    store.enable();
+    store.disable();
+    expect(store.revision).toBe(afterWrite);
+
+    // A delete does invalidate the listing.
+    expect(store.delete("s1")).toBe(true);
+    expect(store.revision).toBe(afterWrite + 1);
+});
+
+test("listSince returns a full snapshot first and a delta afterwards", () => {
+    const { storage } = testStorage();
+    const store = new TraceHistoryStore(storage).enable();
+    writeSession(store, "s1");
+
+    const since = store.revision;
+    const full = store.listSince(undefined);
+    expect(full).toMatchObject({ full: true, removed: [], revision: since });
+    expect(full.sessions.map((entry) => entry.sessionId)).toEqual(["s1"]);
+
+    writeSession(store, "s2");
+    const delta = store.listSince(since);
+    expect(delta).toMatchObject({
+        full: false,
+        removed: [],
+        revision: store.revision,
+    });
+    expect(delta.sessions.map((entry) => entry.sessionId)).toEqual(["s2"]);
+});
+
+test("listSince coalesces repeated writes to one latest summary", () => {
+    const { storage } = testStorage();
+    const store = new TraceHistoryStore(storage).enable();
+    const since = store.revision;
+
+    store.onSessionStart(header("busy"));
+    store.onChunk(chunk("busy", 0));
+    store.onChunk(chunk("busy", 1));
+    store.onSessionEnd(end("busy", { chunkCount: 2, eventCount: 20 }));
+
+    const delta = store.listSince(since);
+    expect(delta.full).toBe(false);
+    expect(delta.sessions).toHaveLength(1);
+    expect(delta.sessions[0]).toMatchObject({
+        sessionId: "busy",
+        status: "completed",
+        chunkCount: 2,
+        eventCount: 20,
+    });
+    expect(delta.removed).toEqual([]);
+});
+
+test("a session written and deleted after since is reported only as removed", () => {
+    const { storage } = testStorage();
+    const store = new TraceHistoryStore(storage).enable();
+    const since = store.revision;
+
+    writeSession(store, "gone");
+    expect(store.delete("gone")).toBe(true);
+
+    const delta = store.listSince(since);
+    expect(delta.full).toBe(false);
+    expect(delta.sessions).toEqual([]);
+    expect(delta.removed).toEqual(["gone"]);
+});
+
+test("listSince stays incremental across many writes", () => {
+    const { storage } = testStorage();
+    const store = new TraceHistoryStore(storage).enable();
+    writeSession(store, "s1");
+
+    const since = store.revision;
+    store.onSessionStart(header("long"));
+    for (let index = 0; index < 600; index++) {
+        store.onChunk(chunk("long", index));
+    }
+    store.onSessionEnd(end("long", { chunkCount: 600, eventCount: 6000 }));
+
+    const delta = store.listSince(since);
+    expect(delta.full).toBe(false);
+    expect(delta.sessions.map((entry) => entry.sessionId)).toEqual(["long"]);
+    expect(delta.removed).toEqual([]);
+});
+
+test("listSince falls back to full when since is ahead or tombstones were pruned", () => {
+    const { storage } = testStorage();
+    const store = new TraceHistoryStore(storage).enable();
+    writeSession(store, "s1");
+
+    expect(store.listSince(store.revision + 1)).toMatchObject({
+        full: true,
+        removed: [],
+    });
+
+    // 300 deletions exceed the 256-tombstone window, so a caller from before
+    // that window cannot reconstruct the removed ids incrementally.
+    const since = store.revision;
+    for (let index = 0; index < 300; index++) {
+        const sessionId = `gone-${index}`;
+        writeSession(store, sessionId);
+        expect(store.delete(sessionId)).toBe(true);
+    }
+
+    const stale = store.listSince(since);
+    expect(stale.full).toBe(true);
+    expect(stale.sessions.map((entry) => entry.sessionId)).toEqual(["s1"]);
+
+    // A recent revision is still served incrementally.
+    const recent = store.listSince(store.revision - 1);
+    expect(recent.full).toBe(false);
+    expect(recent.removed).toHaveLength(1);
+    expect(store.listSince(store.revision)).toEqual({
+        full: false,
+        sessions: [],
+        removed: [],
+        revision: store.revision,
+    });
+});

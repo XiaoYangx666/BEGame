@@ -22,6 +22,22 @@ const DEFAULT_MAX_SESSIONS = 50;
 const DEFAULT_MAX_BYTES = 2 * 1024 * 1024;
 const DEFAULT_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 const DEFAULT_CLEANUP_INTERVAL_TICKS = 6000;
+/**
+ * Bounded tombstones keep deletions available to incremental pollers. Once a
+ * tombstone is dropped, a client that is further behind must take a full list;
+ * otherwise it could keep a session that no longer exists.
+ */
+const DEFAULT_TOMBSTONE_LIMIT = 256;
+
+/** Result of {@link TraceHistoryStore.listSince}. */
+export interface TraceListingDelta {
+    /** True when the caller cannot be served incrementally. */
+    readonly full: boolean;
+    readonly sessions: StoredTraceSummary[];
+    /** Sessions deleted after the caller's revision, newest change wins. */
+    readonly removed: string[];
+    readonly revision: number;
+}
 
 interface TraceHistoryMetaV1 {
     readonly storageVersion: 1;
@@ -64,6 +80,23 @@ export class TraceHistoryStore implements TraceSink {
      * dynamic property per stored session.
      */
     private listing?: StoredTraceSummary[];
+    /**
+     * Monotonic listing revision. Bumped only when {@link listing} is
+     * invalidated, so a remote poller can prove its cached copy is current
+     * without transferring every summary again.
+     */
+    private _revision = 0;
+    /**
+     * Last write revision per current session. A poller only needs a session's
+     * latest summary, so one entry replaces a change log.
+     */
+    private readonly sessionRevisions = new Map<string, number>();
+    /**
+     * Deletions retained for incremental pollers. `_tombstoneFloor` is the
+     * newest dropped tombstone revision; older callers must take a full list.
+     */
+    private readonly tombstones = new Map<string, number>();
+    private _tombstoneFloor = 0;
 
     constructor(
         private readonly storage: TraceStorage = createInMemoryStorage(),
@@ -75,6 +108,11 @@ export class TraceHistoryStore implements TraceSink {
 
     get enabled() {
         return this._enabled;
+    }
+
+    /** Monotonic revision of the current listing snapshot. */
+    get revision() {
+        return this._revision;
     }
 
     /** Whether new sessions can safely be persisted right now. */
@@ -262,6 +300,42 @@ export class TraceHistoryStore implements TraceSink {
         return [...summaries];
     }
 
+    /**
+     * Incremental view for a caller that already has the listing at `since`.
+     *
+     * A full listing is returned on the first poll, when the caller is ahead of
+     * this store (for example after a script reload), or when a dropped
+     * tombstone means deletions can no longer be reconstructed. Otherwise only
+     * sessions changed after `since` are returned; a session written and then
+     * deleted appears only in `removed`.
+     */
+    listSince(since: number | undefined): TraceListingDelta {
+        const revision = this._revision;
+        if (since === undefined || since > revision || since < this._tombstoneFloor) {
+            return { full: true, sessions: this.list(), removed: [], revision };
+        }
+        if (since === revision) {
+            return { full: false, sessions: [], removed: [], revision };
+        }
+
+        // A session's latest write revision is enough to decide whether the
+        // caller already has it. Only materialize the cached listing when at
+        // least one session actually changed; delete-only deltas stay cheap.
+        const upserts = new Set<string>();
+        for (const [sessionId, updatedAt] of this.sessionRevisions) {
+            if (updatedAt > since) upserts.add(sessionId);
+        }
+        const sessions =
+            upserts.size === 0
+                ? []
+                : this.list().filter((entry) => upserts.has(entry.sessionId));
+        const removed: string[] = [];
+        for (const [sessionId, deletedAt] of this.tombstones) {
+            if (deletedAt > since) removed.push(sessionId);
+        }
+        return { full: false, sessions, removed, revision };
+    }
+
     latest(): StoredTraceSummary | undefined {
         return this.list().find((entry) => entry.status !== "running");
     }
@@ -324,7 +398,7 @@ export class TraceHistoryStore implements TraceSink {
             this.storage.kv.set(id, undefined);
             removed = true;
         }
-        if (removed) this.listing = undefined;
+        if (removed) this.invalidateListing("delete", sessionId);
         return removed;
     }
 
@@ -453,7 +527,35 @@ export class TraceHistoryStore implements TraceSink {
 
     private writeMeta(meta: TraceHistoryMetaV1) {
         this.storage.kv.set(this.metaKey(meta.header.sessionId), JSON.stringify(meta));
+        this.invalidateListing("upsert", meta.header.sessionId);
+    }
+
+    private invalidateListing(type: "upsert" | "delete", sessionId: string) {
         this.listing = undefined;
+        const revision = ++this._revision;
+
+        if (type === "upsert") {
+            this.sessionRevisions.set(sessionId, revision);
+            // A recreated session must not also be reported as removed.
+            this.tombstones.delete(sessionId);
+            return;
+        }
+
+        this.sessionRevisions.delete(sessionId);
+        this.tombstones.set(sessionId, revision);
+        this.pruneTombstones();
+    }
+
+    private pruneTombstones() {
+        while (this.tombstones.size > DEFAULT_TOMBSTONE_LIMIT) {
+            const oldest = this.tombstones.keys().next().value;
+            if (oldest === undefined) return;
+            const droppedRevision = this.tombstones.get(oldest);
+            this.tombstones.delete(oldest);
+            if (droppedRevision !== undefined && droppedRevision > this._tombstoneFloor) {
+                this._tombstoneFloor = droppedRevision;
+            }
+        }
     }
 
     private readMeta(sessionId: string) {

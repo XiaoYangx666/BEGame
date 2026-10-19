@@ -32,7 +32,7 @@ async function connectedBridge() {
     await flush();
     const socket = sockets.at(-1);
     expect(socket).toBeDefined();
-    return { bridge, socket, sessionId };
+    return { bridge, socket, sessionId, trace };
 }
 
 function request(socket, value) {
@@ -53,15 +53,119 @@ test("connecting sends a ready handshake with store status", async () => {
     expect(ready.packId).toBe("probe");
     expect(ready.packName).toBe("probe");
     expect(ready.store.count).toBe(1);
+    expect(ready.store.revision).toBeGreaterThan(0);
     expect(connectionAttempts[0].uri).toBe(URL);
     bridge.stop();
 });
 
-test("list returns stored sessions", async () => {
-    const { bridge, socket, sessionId } = await connectedBridge();
+test("list returns stored sessions with a revision and store status", async () => {
+    const { bridge, socket, sessionId, trace } = await connectedBridge();
     const reply = request(socket, { v: 1, kind: "request", id: "1", op: "list" });
     expect(reply.ok).toBe(true);
+    expect(reply.result.full).toBe(true);
+    expect(reply.result.removed).toEqual([]);
     expect(reply.result.sessions.map((entry) => entry.sessionId)).toEqual([sessionId]);
+    expect(reply.result.revision).toBe(trace.store.revision);
+    expect(reply.result.store).toMatchObject({
+        count: 1,
+        running: 0,
+        revision: trace.store.revision,
+    });
+    bridge.stop();
+});
+
+test("list since returns only sessions changed after the revision", async () => {
+    const { bridge, socket, sessionId, trace } = await connectedBridge();
+    const first = request(socket, { v: 1, kind: "request", id: "1", op: "list" });
+    const since = first.result.revision;
+
+    const second = trace.beginSession({ gameType: "probe", gameKey: "probe:2" });
+    second.game.debug("second-session");
+    trace.endSession("probe:2", "completed");
+
+    const delta = request(socket, { v: 1, kind: "request", id: "2", op: "list", since });
+    expect(delta.result).toMatchObject({
+        full: false,
+        removed: [],
+        revision: trace.store.revision,
+        store: { count: 2, revision: trace.store.revision },
+    });
+    expect(delta.result.sessions.map((entry) => entry.sessionId)).toEqual([
+        second.header.sessionId,
+    ]);
+    expect(delta.result.sessions.map((entry) => entry.sessionId)).not.toContain(sessionId);
+
+    const unchanged = request(socket, {
+        v: 1,
+        kind: "request",
+        id: "3",
+        op: "list",
+        since: delta.result.revision,
+    });
+    expect(unchanged.result).toMatchObject({
+        unchanged: true,
+        revision: trace.store.revision,
+    });
+    bridge.stop();
+});
+
+test("list with the current revision acknowledges without reading sessions", async () => {
+    const { bridge, socket, sessionId, trace } = await connectedBridge();
+    const originalList = trace.store.list.bind(trace.store);
+    let listCalls = 0;
+    trace.store.list = () => {
+        listCalls++;
+        return originalList();
+    };
+
+    const revision = trace.store.revision;
+    const unchanged = request(socket, {
+        v: 1,
+        kind: "request",
+        id: "1",
+        op: "list",
+        since: revision,
+    });
+    expect(unchanged.ok).toBe(true);
+    expect(unchanged.result).toMatchObject({
+        unchanged: true,
+        revision,
+        store: { count: 1, revision },
+    });
+    expect(unchanged.result.sessions).toBeUndefined();
+    expect(listCalls).toBe(0);
+
+    // A listing write bumps the revision, so the next poll returns a delta.
+    expect(trace.store.delete(sessionId)).toBe(true);
+    const changed = request(socket, {
+        v: 1,
+        kind: "request",
+        id: "2",
+        op: "list",
+        since: revision,
+    });
+    expect(changed.result).toMatchObject({
+        full: false,
+        sessions: [],
+        removed: [sessionId],
+    });
+    expect(changed.result.revision).toBeGreaterThan(revision);
+    expect(listCalls).toBe(1);
+
+    // A write that does not touch the listing (persist the enabled flag) must
+    // not invalidate the cached revision.
+    const afterWrite = trace.store.revision;
+    trace.store.enable();
+    expect(trace.store.revision).toBe(afterWrite);
+    bridge.stop();
+});
+
+test("list without since still returns the full legacy shape", async () => {
+    const { bridge, socket, sessionId } = await connectedBridge();
+    const reply = request(socket, { v: 1, kind: "request", id: "1", op: "list" });
+    expect(reply.result.full).toBe(true);
+    expect(reply.result.sessions.map((entry) => entry.sessionId)).toEqual([sessionId]);
+    expect("unchanged" in reply.result).toBe(false);
     bridge.stop();
 });
 

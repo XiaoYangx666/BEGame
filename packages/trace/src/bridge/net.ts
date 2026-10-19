@@ -30,7 +30,41 @@ export interface TraceNetStoreStatus {
     readonly acceptingSessions: boolean;
     readonly count: number;
     readonly running: number;
+    /**
+     * Monotonic listing revision of the pack's history store. Absent on packs
+     * that predate revision tracking (protocol version 1 without the addition).
+     */
+    readonly revision?: number;
 }
+
+/**
+ * Full listing, an incremental delta, or a tiny acknowledgement when the
+ * caller's cached revision is still current.
+ */
+export type TraceNetListResult =
+    | {
+          readonly unchanged: true;
+          readonly revision: number;
+          readonly store: TraceNetStoreStatus;
+      }
+    | {
+          readonly sessions: readonly StoredTraceSummary[];
+          /**
+           * Sessions deleted after the caller's `since`. `full: false` replies
+           * always include it; full replies normally send an empty array.
+           */
+          readonly removed?: readonly string[];
+          /**
+           * `false` means `sessions` is a delta and `removed` must be applied.
+           * Absent on packs that predate incremental listings; treat those as
+           * full replacements.
+           */
+          readonly full?: boolean;
+          /** Absent on packs that predate revision tracking. */
+          readonly revision?: number;
+          /** Absent on packs that predate the combined list/store reply. */
+          readonly store?: TraceNetStoreStatus;
+      };
 
 /** Observatory -> game. */
 export type TraceNetRequest =
@@ -38,7 +72,18 @@ export type TraceNetRequest =
           readonly v: typeof TRACE_NET_VERSION;
           readonly kind: "request";
           readonly id: string;
-          readonly op: "list" | "clear" | "status";
+          readonly op: "list";
+          /**
+           * Revision the caller already has. When it matches the store, the
+           * reply is `{ unchanged: true, ... }` with no session list.
+           */
+          readonly since?: number;
+      }
+    | {
+          readonly v: typeof TRACE_NET_VERSION;
+          readonly kind: "request";
+          readonly id: string;
+          readonly op: "clear" | "status";
       }
     | {
           readonly v: typeof TRACE_NET_VERSION;
@@ -68,7 +113,7 @@ export type TraceNetRequest =
  * than on the shape.
  */
 export type TraceNetResult =
-    | { readonly sessions: readonly StoredTraceSummary[] }
+    | TraceNetListResult
     | { readonly sessionId: string; readonly parts: number; readonly chars: number }
     | { readonly sessionId: string; readonly part: number; readonly data: string }
     | { readonly sessionId: string; readonly deleted: boolean }
@@ -119,6 +164,19 @@ export function parseTraceNetRequest(value: unknown): TraceNetRequest | undefine
     if (typeof id !== "string" || id.length === 0) return undefined;
     switch (value.op) {
         case "list":
+            if (value.since === undefined) {
+                return { v: TRACE_NET_VERSION, kind: "request", id, op: "list" };
+            }
+            if (!Number.isSafeInteger(value.since) || (value.since as number) < 0) {
+                return undefined;
+            }
+            return {
+                v: TRACE_NET_VERSION,
+                kind: "request",
+                id,
+                op: "list",
+                since: value.since as number,
+            };
         case "clear":
         case "status":
             return { v: TRACE_NET_VERSION, kind: "request", id, op: value.op };

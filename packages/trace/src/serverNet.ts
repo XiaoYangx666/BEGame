@@ -37,6 +37,7 @@ import type {
     TraceSessionHeader,
     TraceSink,
 } from "./wire/types";
+import type { TraceListingDelta } from "./runtime/historyStore";
 
 export interface ServerNetTraceSinkOptions {
     /** Full ingest endpoint, e.g. `http://127.0.0.1:8787/api/ingest`. */
@@ -186,11 +187,14 @@ export function createServerNetTraceSink(
 export interface ServerNetTraceSource {
     readonly store: {
         list(): StoredTraceSummary[];
+        listSince(since: number | undefined): TraceListingDelta;
         delete(sessionId: string): boolean;
         enable(): unknown;
         disable(): unknown;
         readonly enabled: boolean;
         readonly acceptingSessions: boolean;
+        /** Monotonic revision of the listing snapshot. */
+        readonly revision: number;
     };
     snapshotBytes(sessionId: string): Uint8Array;
 }
@@ -274,12 +278,32 @@ export function createServerNetTraceBridge(
     let consecutiveFailures = 0;
     let connectFailureReported = false;
     let cached: { sessionId: string; base64: string } | undefined;
+    /**
+     * Counts derived from the last listing. A revision match proves the listing
+     * cannot have changed, so an `unchanged` reply can still report store status
+     * without calling `list()` (and rebuilding/scanning it) again.
+     */
+    let listingCounts:
+        | { revision: number; count: number; running: number }
+        | undefined;
 
     function storeStatus(): TraceNetStoreStatus {
-        const sessions = options.trace.store.list();
+        const revision = options.trace.store.revision;
+        if (listingCounts?.revision !== revision) {
+            recordListing(revision, options.trace.store.list());
+        }
         return {
             enabled: options.trace.store.enabled,
             acceptingSessions: options.trace.store.acceptingSessions,
+            count: listingCounts!.count,
+            running: listingCounts!.running,
+            revision,
+        };
+    }
+
+    function recordListing(revision: number, sessions: readonly StoredTraceSummary[]) {
+        listingCounts = {
+            revision,
             count: sessions.length,
             running: sessions.filter((entry) => entry.status === "running").length,
         };
@@ -295,14 +319,30 @@ export function createServerNetTraceBridge(
                 acceptingSessions: false,
                 count: 0,
                 running: 0,
+                revision: options.trace.store.revision,
             };
         }
     }
 
     function perform(request: TraceNetRequest): TraceNetResult {
         switch (request.op) {
-            case "list":
-                return { sessions: options.trace.store.list() };
+            case "list": {
+                const revision = options.trace.store.revision;
+                if (request.since !== undefined && request.since === revision) {
+                    // The caller's snapshot is current: no session reads or
+                    // serialization, just a small acknowledgement.
+                    return { unchanged: true, revision, store: storeStatus() };
+                }
+                const delta = options.trace.store.listSince(request.since);
+                if (delta.full) recordListing(delta.revision, delta.sessions);
+                return {
+                    sessions: delta.sessions,
+                    removed: delta.removed,
+                    full: delta.full,
+                    revision: delta.revision,
+                    store: storeStatus(),
+                };
+            }
             case "status":
             case "store": {
                 if (request.op === "store") {

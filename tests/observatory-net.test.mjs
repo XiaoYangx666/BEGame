@@ -49,66 +49,181 @@ function traceBytes(sessionId) {
 }
 
 /** A scripted stand-in for one BDS pack. */
-function fakeGame(socket, sessionId) {
-    const bytes = traceBytes(sessionId);
-    const encoded = encodeBase64(new Uint8Array(bytes));
-    const state = { deleted: false, enabled: true };
+function fakeGame(socket, sessionId, options = {}) {
+    const summaries = new Map();
+    const state = {
+        enabled: true,
+        revision: options.revision ?? 0,
+        delayMs: options.delayMs ?? 0,
+        requests: [],
+        listReplies: [],
+        changes: [],
+        fullFallback: false,
+        badRemoved: false,
+        sessions: summaries,
+        add(id, extra = {}) {
+            const entry = {
+                sessionId: id,
+                gameType: "net-test",
+                gameKey: `net-test:${id}`,
+                status: "completed",
+                startTick: 0,
+                startWallTime: 0,
+                eventCount: 0,
+                chunkCount: 0,
+                storedBytes: 0,
+                ...extra,
+            };
+            summaries.set(id, entry);
+            state.revision++;
+            state.changes.push({
+                revision: state.revision,
+                type: "upsert",
+                sessionId: id,
+            });
+            return entry;
+        },
+        remove(id) {
+            if (!summaries.delete(id)) return false;
+            state.revision++;
+            state.changes.push({
+                revision: state.revision,
+                type: "delete",
+                sessionId: id,
+            });
+            return true;
+        },
+    };
+    state.add(sessionId);
+    const bytesFor = (id) => traceBytes(id);
+    const encodedFor = (id) => encodeBase64(new Uint8Array(bytesFor(id)));
+    const status = () => ({
+        enabled: state.enabled,
+        acceptingSessions: state.enabled,
+        count: summaries.size,
+        running: [...summaries.values()].filter((entry) => entry.status === "running").length,
+        ...(options.legacy ? {} : { revision: state.revision }),
+    });
     socket.onmessage = (event) => {
         const request = JSON.parse(event.data);
+        state.requests.push(request);
+        const send = (payload) =>
+            state.delayMs > 0
+                ? setTimeout(() => socket.send(JSON.stringify(payload)), state.delayMs)
+                : socket.send(JSON.stringify(payload));
         const reply = (result) =>
-            socket.send(
-                JSON.stringify({
-                    v: TRACE_NET_VERSION,
-                    kind: "response",
-                    id: request.id,
-                    op: request.op,
-                    ok: true,
-                    result,
-                })
-            );
-        const summary = {
-            sessionId,
-            gameType: "net-test",
-            gameKey: `net-test:${sessionId}`,
-            status: "completed",
-            startTick: 0,
-            startWallTime: 0,
-            eventCount: 0,
-            chunkCount: 0,
-            storedBytes: bytes.length,
-        };
+            send({
+                v: TRACE_NET_VERSION,
+                kind: "response",
+                id: request.id,
+                op: request.op,
+                ok: true,
+                result,
+            });
         switch (request.op) {
-            case "list":
-                return reply({ sessions: state.deleted ? [] : [summary] });
-            case "begin":
-                return reply({ sessionId: request.sessionId, parts: 1, chars: encoded.length });
-            case "part":
-                return reply({ sessionId: request.sessionId, part: request.part, data: encoded });
-            case "delete":
-                state.deleted = true;
+            case "list": {
+                const all = [...summaries.values()];
+                if (options.legacy) {
+                    const result = { sessions: all };
+                    state.listReplies.push(result);
+                    return reply(result);
+                }
+                if (request.since === state.revision) {
+                    const result = {
+                        unchanged: true,
+                        revision: state.revision,
+                        store: status(),
+                    };
+                    state.listReplies.push(result);
+                    return reply(result);
+                }
+                if (
+                    request.since === undefined ||
+                    request.since > state.revision ||
+                    state.fullFallback
+                ) {
+                    const result = {
+                        sessions: all,
+                        removed: [],
+                        full: true,
+                        revision: state.revision,
+                        store: status(),
+                    };
+                    state.listReplies.push(result);
+                    return reply(result);
+                }
+                const latest = new Map();
+                for (const change of state.changes) {
+                    if (change.revision > request.since) {
+                        latest.set(change.sessionId, change.type);
+                    }
+                }
+                const sessions = [];
+                const removed = [];
+                for (const [id, type] of latest) {
+                    if (type === "upsert") {
+                        const entry = summaries.get(id);
+                        if (entry) sessions.push(entry);
+                    } else {
+                        removed.push(id);
+                    }
+                }
+                const result = {
+                    sessions,
+                    removed: state.badRemoved ? "not-an-array" : removed,
+                    full: false,
+                    revision: state.revision,
+                    store: status(),
+                };
+                state.listReplies.push(result);
+                return reply(result);
+            }
+            case "begin": {
+                const encoded = encodedFor(request.sessionId);
+                return reply({
+                    sessionId: request.sessionId,
+                    parts: 1,
+                    chars: encoded.length,
+                });
+            }
+            case "part": {
+                const encoded = encodedFor(request.sessionId);
+                return reply({
+                    sessionId: request.sessionId,
+                    part: request.part,
+                    data: encoded,
+                });
+            }
+            case "delete": {
+                state.remove(request.sessionId);
                 return reply({ sessionId: request.sessionId, deleted: true });
-            case "clear":
-                state.deleted = true;
-                return reply({ removed: 1 });
+            }
+            case "clear": {
+                let removed = 0;
+                for (const id of [...summaries.keys()]) {
+                    if (state.remove(id)) removed++;
+                }
+                return reply({ removed });
+            }
             case "store":
                 state.enabled = request.enabled;
-                return reply({ enabled: state.enabled, acceptingSessions: state.enabled, count: 1, running: 0 });
+                return reply(status());
             case "status":
-                return reply({ enabled: state.enabled, acceptingSessions: state.enabled, count: 1, running: 0 });
+                return reply(status());
             default:
                 return;
         }
     };
-    return bytes;
+    return { bytes: bytesFor(sessionId), state };
 }
 
-async function openPack(bridge, packId, sessionId, packName) {
+async function openPack(bridge, packId, sessionId, packName, options = {}) {
     const socket = new WebSocket(`ws://127.0.0.1:${await listening(bridge)}/`);
     await new Promise((resolve, reject) => {
         socket.onopen = resolve;
         socket.onerror = reject;
     });
-    const bytes = fakeGame(socket, sessionId);
+    const { bytes, state } = fakeGame(socket, sessionId, options);
     socket.send(
         JSON.stringify({
             v: TRACE_NET_VERSION,
@@ -116,10 +231,16 @@ async function openPack(bridge, packId, sessionId, packName) {
             protocolVersion: 1,
             packId,
             packName,
-            store: { enabled: true, acceptingSessions: true, count: 1, running: 0 },
+            store: {
+                enabled: true,
+                acceptingSessions: true,
+                count: state.sessions.size,
+                running: 0,
+                ...(options.legacy ? {} : { revision: state.revision }),
+            },
         })
     );
-    return { socket, bytes };
+    return { socket, bytes, state };
 }
 
 async function withBridge(run, token) {
@@ -160,6 +281,207 @@ test("multiple packs connect at once and requests route by source", async () => 
 
         pg.socket.close();
         ddz.socket.close();
+    });
+});
+
+test("an unchanged poll reuses the cached listing without a status round trip", async () => {
+    await withBridge(async (bridge) => {
+        const pack = await openPack(bridge, "ddz", "ddz-1", "DDZ");
+        await waitFor(() => bridge.sources().length === 1);
+
+        const first = await bridge.listAll();
+        expect(first[0].sessions.map((entry) => entry.sessionId)).toEqual(["ddz-1"]);
+        expect(pack.state.requests.map((entry) => entry.op)).toEqual(["list"]);
+
+        const second = await bridge.listAll();
+        expect(second[0].sessions).toEqual(first[0].sessions);
+        expect(pack.state.requests.map((entry) => entry.op)).toEqual(["list", "list"]);
+        expect(pack.state.requests[1].since).toBe(1);
+
+        pack.socket.close();
+    });
+});
+
+test("a delta reply merges only changed sessions into the cache", async () => {
+    await withBridge(async (bridge) => {
+        const pack = await openPack(bridge, "ddz", "ddz-1", "DDZ");
+        await waitFor(() => bridge.sources().length === 1);
+        await bridge.listAll();
+
+        pack.state.add("ddz-2", { startWallTime: 200 });
+        const changed = await bridge.listAll();
+        expect(changed[0].sessions.map((entry) => entry.sessionId)).toEqual([
+            "ddz-2",
+            "ddz-1",
+        ]);
+        expect(pack.state.requests.at(-1)).toMatchObject({ op: "list", since: 1 });
+        expect(pack.state.listReplies.at(-1)).toMatchObject({
+            full: false,
+            removed: [],
+        });
+        // Only the changed session crossed the wire.
+        expect(pack.state.listReplies.at(-1).sessions).toHaveLength(1);
+
+        pack.socket.close();
+    });
+});
+
+test("a removed session disappears from the merged cache", async () => {
+    await withBridge(async (bridge) => {
+        const pack = await openPack(bridge, "ddz", "ddz-1", "DDZ");
+        await waitFor(() => bridge.sources().length === 1);
+        await bridge.listAll();
+
+        pack.state.add("ddz-2", { startWallTime: 200 });
+        expect((await bridge.listAll())[0].sessions).toHaveLength(2);
+
+        const beforeRemove = pack.state.revision;
+        pack.state.remove("ddz-1");
+        const after = await bridge.listAll();
+        expect(after[0].sessions.map((entry) => entry.sessionId)).toEqual(["ddz-2"]);
+        expect(pack.state.requests.at(-1)).toMatchObject({
+            op: "list",
+            since: beforeRemove,
+        });
+        expect(pack.state.listReplies.at(-1)).toMatchObject({
+            full: false,
+            removed: ["ddz-1"],
+        });
+
+        pack.socket.close();
+    });
+});
+
+test("a full reply replaces the cache and sorts by start time", async () => {
+    await withBridge(async (bridge) => {
+        const pack = await openPack(bridge, "ddz", "ddz-1", "DDZ");
+        await waitFor(() => bridge.sources().length === 1);
+        await bridge.listAll();
+
+        pack.state.add("ddz-2", { startWallTime: 300 });
+        pack.state.add("ddz-3", { startWallTime: 200 });
+        pack.state.fullFallback = true;
+        const all = await bridge.listAll();
+        expect(all[0].sessions.map((entry) => entry.sessionId)).toEqual([
+            "ddz-2",
+            "ddz-3",
+            "ddz-1",
+        ]);
+        expect(pack.state.listReplies.at(-1).full).toBe(true);
+
+        pack.socket.close();
+    });
+});
+
+test("an invalid delta is reported as a source error without corrupting the cache", async () => {
+    await withBridge(async (bridge) => {
+        const pack = await openPack(bridge, "ddz", "ddz-1", "DDZ");
+        await waitFor(() => bridge.sources().length === 1);
+        await bridge.listAll();
+
+        pack.state.add("ddz-2");
+        pack.state.badRemoved = true;
+        const bad = await bridge.listAll();
+        expect(bad[0].error).toContain("removed");
+        expect(bad[0].sessions).toEqual([]);
+
+        // The rejected delta never reached the cache.
+        pack.state.badRemoved = false;
+        const recovered = await bridge.listAll();
+        expect(recovered[0].sessions.map((entry) => entry.sessionId).sort()).toEqual([
+            "ddz-1",
+            "ddz-2",
+        ]);
+
+        pack.socket.close();
+    });
+});
+
+test("legacy packs without a full field replace the cache", async () => {
+    await withBridge(async (bridge) => {
+        const pack = await openPack(bridge, "ddz", "ddz-1", "DDZ", { legacy: true });
+        await waitFor(() => bridge.sources().length === 1);
+        await bridge.listAll();
+
+        pack.state.remove("ddz-1");
+        pack.state.add("ddz-2");
+        const after = await bridge.listAll();
+        expect(after[0].sessions.map((entry) => entry.sessionId)).toEqual(["ddz-2"]);
+
+        pack.socket.close();
+    });
+});
+
+test("legacy packs without revisions fall back to a status request", async () => {
+    await withBridge(async (bridge) => {
+        const pack = await openPack(bridge, "ddz", "ddz-1", "DDZ", { legacy: true });
+        await waitFor(() => bridge.sources().length === 1);
+
+        const first = await bridge.listAll();
+        expect(first[0].sessions.map((entry) => entry.sessionId)).toEqual(["ddz-1"]);
+        expect(first[0].store).toMatchObject({ enabled: true, count: 1 });
+        expect(pack.state.requests.map((entry) => entry.op)).toEqual(["list", "status"]);
+
+        // No revision is available, so every poll remains a full legacy poll.
+        await bridge.listAll();
+        expect(pack.state.requests.map((entry) => entry.op)).toEqual([
+            "list",
+            "status",
+            "list",
+            "status",
+        ]);
+        expect(pack.state.requests.filter((entry) => entry.op === "list").every(
+            (entry) => !("since" in entry)
+        )).toBe(true);
+
+        pack.socket.close();
+    });
+});
+
+test("concurrent pollers share one in-flight list request", async () => {
+    await withBridge(async (bridge) => {
+        const pack = await openPack(bridge, "ddz", "ddz-1", "DDZ", { delayMs: 30 });
+        await waitFor(() => bridge.sources().length === 1);
+
+        const [a, b] = await Promise.all([bridge.listAll(), bridge.listAll()]);
+        expect(a[0].sessions.map((entry) => entry.sessionId)).toEqual(["ddz-1"]);
+        expect(b[0].sessions.map((entry) => entry.sessionId)).toEqual(["ddz-1"]);
+        expect(pack.state.requests.filter((entry) => entry.op === "list")).toHaveLength(1);
+
+        // The finished request populated the cache, so the next pair is one
+        // tiny unchanged poll rather than another full transfer.
+        await Promise.all([bridge.listAll(), bridge.listAll()]);
+        const lists = pack.state.requests.filter((entry) => entry.op === "list");
+        expect(lists).toHaveLength(2);
+        expect(lists[1].since).toBe(1);
+
+        pack.socket.close();
+    });
+});
+
+test("a reconnecting pack starts from a fresh cache", async () => {
+    await withBridge(async (bridge) => {
+        const first = await openPack(bridge, "ddz", "old-session", "DDZ");
+        await waitFor(() => bridge.sources().length === 1);
+        await bridge.listAll();
+        expect(first.state.requests).toHaveLength(1);
+
+        first.socket.close();
+        await waitFor(() => bridge.sources().length === 0);
+
+        // The reloaded pack starts at the same revision 1. If the cache were
+        // kept, this poll would be mistaken for `unchanged` and list the old
+        // session instead of the new one.
+        const second = await openPack(bridge, "ddz", "new-session", "DDZ");
+        await waitFor(() => bridge.sources().length === 1);
+        const sessions = await bridge.listAll();
+        expect(sessions[0].sessions.map((entry) => entry.sessionId)).toEqual([
+            "new-session",
+        ]);
+        expect(second.state.requests[0].op).toBe("list");
+        expect("since" in second.state.requests[0]).toBe(false);
+
+        second.socket.close();
     });
 });
 
