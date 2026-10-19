@@ -257,3 +257,50 @@ test("drives maintenance through the injected scheduler", () => {
     store.disable();
     expect(harness.timers.size).toBe(0);
 });
+
+test("list() reuses one snapshot until a store write invalidates it", () => {
+    const { storage } = testStorage();
+    const store = new TraceHistoryStore(storage).enable();
+    writeSession(store, "s1");
+
+    let keyReads = 0;
+    let valueReads = 0;
+    const keys = storage.kv.keys;
+    const get = storage.kv.get;
+    storage.kv.keys = () => {
+        keyReads++;
+        return keys();
+    };
+    storage.kv.get = (key) => {
+        valueReads++;
+        return get(key);
+    };
+
+    // Warm the snapshot, then prove repeated polls do not touch the substrate.
+    const first = store.list();
+    keyReads = 0;
+    valueReads = 0;
+    expect(store.list()).toEqual(first);
+    expect(store.list()).toEqual(first);
+    expect(keyReads).toBe(0);
+    expect(valueReads).toBe(0);
+
+    // A session write invalidates exactly once; the next poll rebuilds.
+    store.onSessionStart(header("s2"));
+    keyReads = 0;
+    valueReads = 0;
+    expect(store.list().map((entry) => entry.sessionId)).toEqual(["s2", "s1"]);
+    expect(keyReads).toBe(1);
+    expect(valueReads).toBe(2);
+
+    // A delete invalidates too.
+    expect(store.delete("s1")).toBe(true);
+    keyReads = 0;
+    valueReads = 0;
+    expect(store.list().map((entry) => entry.sessionId)).toEqual(["s2"]);
+    expect(keyReads).toBe(1);
+    expect(valueReads).toBe(1);
+
+    // Cached snapshots are independent arrays, not aliases of the cache.
+    expect(first.map((entry) => entry.sessionId)).toEqual(["s1"]);
+});

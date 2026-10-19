@@ -58,6 +58,12 @@ export class TraceHistoryStore implements TraceSink {
     private recoverOnMaintenance = false;
     /** Sessions that were accepted while storage was enabled must finish atomically. */
     private readonly activeSessions = new Set<string>();
+    /**
+     * Listing snapshots are rebuilt only after a store write. Consumers such as
+     * the Observatory poll `list()` while idle, and every rebuild reads one
+     * dynamic property per stored session.
+     */
+    private listing?: StoredTraceSummary[];
 
     constructor(
         private readonly storage: TraceStorage = createInMemoryStorage(),
@@ -235,6 +241,7 @@ export class TraceHistoryStore implements TraceSink {
 
     /** Newest sessions first. Corrupt metadata is skipped and reported. */
     list(): StoredTraceSummary[] {
+        if (this.listing) return [...this.listing];
         const summaries: StoredTraceSummary[] = [];
         for (const id of this.storage.kv.keys()) {
             if (!id.startsWith(STORE_PREFIX) || !id.endsWith(".meta")) continue;
@@ -251,7 +258,8 @@ export class TraceHistoryStore implements TraceSink {
                 b.startWallTime - a.startWallTime ||
                 b.sessionId.localeCompare(a.sessionId)
         );
-        return summaries;
+        this.listing = summaries;
+        return [...summaries];
     }
 
     latest(): StoredTraceSummary | undefined {
@@ -316,6 +324,7 @@ export class TraceHistoryStore implements TraceSink {
             this.storage.kv.set(id, undefined);
             removed = true;
         }
+        if (removed) this.listing = undefined;
         return removed;
     }
 
@@ -444,6 +453,7 @@ export class TraceHistoryStore implements TraceSink {
 
     private writeMeta(meta: TraceHistoryMetaV1) {
         this.storage.kv.set(this.metaKey(meta.header.sessionId), JSON.stringify(meta));
+        this.listing = undefined;
     }
 
     private readMeta(sessionId: string) {
