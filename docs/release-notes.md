@@ -41,7 +41,7 @@ Core still declares `@minecraft/server >=2.10.0` and `@minecraft/server-ui >=2.2
 - `npm ci --ignore-scripts`: PASS (Node 26.9.0, npm 12.2.0).
 - `npm run build`: PASS; all five package builds completed.
 - Trace/Observatory targeted tests: PASS, 51 tests across 6 files.
-- `npx vitest run --exclude tests/observatory-daemon.test.mjs`: PASS, 232 tests across 33 files. Full `npm test` on Windows: 239/242 passed; the three failures are in `observatory-daemon.test.mjs`, which assumes POSIX path resolution and hits detached-process cleanup `EPERM`. Run the full suite in Ubuntu CI before release.
+- Ubuntu Verify workflow on commit `4491b2a`: PASS (build, unit tests, tree-shake probes and package inspection). Full `npm test` on Windows: 239/242 passed; the three failures are in `observatory-daemon.test.mjs`, which assumes POSIX path resolution and hits detached-process cleanup `EPERM`.
 - `npm run test:treeshake`: PASS, 6/6 probes.
 - `npm run release:check`: PASS, all five 0.1.1 tarballs validated in npm dry-run; no upload.
 - `npm run pack`: PASS, five local tarballs created.
