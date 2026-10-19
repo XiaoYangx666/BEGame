@@ -1,53 +1,48 @@
-# Release notes draft — BEGame 0.1.0
+# Release notes draft — BEGame 0.1.1
 
-This is a candidate announcement, not a published-release record. The planned initial stable version is 0.1.0, published directly with the latest tag after registry and target-runtime checks.
+This synchronized release refreshes npm metadata and includes the Trace and Observatory changes merged after 0.1.0. All five package names remain unchanged. Published 0.1.0 versions are immutable and retain their existing npm metadata.
 
-BEGame is a TypeScript game framework for Minecraft Bedrock games and gameplay Addons. Games own instances, states own phases, and components own reusable behavior. State-scoped events and managed runners are cleaned up when their phase ends.
+## Trace and bridge updates
 
-## Included
+- `TraceHistoryStore.list()` now caches its sorted summaries and rebuilds the snapshot only after a store write or deletion.
+- `TraceHistoryStore.listSince()` adds revisioned incremental listings. The ServerNet `list` request accepts an optional `since` revision and can return changed summaries, deleted session IDs, a full-snapshot fallback, or a small unchanged acknowledgement. A bounded 256-entry deletion tombstone window forces a full snapshot when a client is too far behind.
+- Observatory merges listing deltas, combines list/store status, and falls back to full replacements for legacy packs without revision fields. Reconnected packs start with a fresh listing cache.
+- Added regression coverage for long-session chunk archiving and retention, bridge reconnect/backoff, initial-config snapshot depth, delta deletion/fallback, and concurrent polls.
 
-- Game instances, state trees, reusable components and coordinated player participation.
-- Disconnect grace periods and empty-room cleanup as composable components.
-- Headless lifecycle tests running the actual framework in Node.
-- Optional Trace recording and Observatory inspection/export.
-- Separate server integration and platform-specific Trace bindings.
-- An English project overview with a Chinese counterpart, a focused documentation index and setup/architecture guides.
+## Observatory updates
 
-## Install
+- Added background daemon operation and process management.
+- Added Tabletop participant and seat event support in Trace analysis and views.
 
-```sh
-npm install @begame/core
-```
+## Known limitation
 
-Install optional packages as needed and keep installed BEGame packages on the same release version. Core declares @minecraft/server >=2.10.0 and @minecraft/server-ui >=2.2.0 peers; the behavior pack must supply supported modules in its manifest.
+`snapshotTraceValue()` still replaces nested containers at depth 5 or greater with `"[Array]"` / `"[Object]"`. The 0.1.1 tests characterize this behavior; this release does not fix deep `initialConfig` snapshot truncation.
 
-[Getting started](./getting-started.md) · [All documentation](./README.md)
+## Packages and links
 
-## Migration
+All five packages are versioned `0.1.1` together. Exact internal dependencies and peers use the same version where applicable; no external dependency declarations were added. Published links use the canonical repository:
 
-Use @begame/core and its documented subpaths for current examples. Built-in server initialization is provided by @begame/core/server. Trace must be constructed and injected explicitly. Replace old AutoStopState-based room examples with AutoStopComponent and, when needed, DisconnectTimeoutComponent on a persistent root state.
+- Repository: <https://github.com/XiaoYangx666/BEGame>
+- Homepage: <https://github.com/XiaoYangx666/BEGame#readme>
+- Issues: <https://github.com/XiaoYangx666/BEGame/issues>
 
-Persist explicit game snapshots rather than serializing runtime states. Match the Trace command namespace to the namespace configured in Observatory.
+| Package | Install |
+| --- | --- |
+| `@begame/core` | `npm install @begame/core@0.1.1` |
+| `@begame/trace` | `npm install @begame/trace@0.1.1` |
+| `@begame/observatory` | `npm install @begame/observatory@0.1.1` |
+| `@begame/trace-spec` | `npm install @begame/trace-spec@0.1.1` |
+| `@begame/test` | `npm install @begame/test@0.1.1` |
+
+Core still declares `@minecraft/server >=2.10.0` and `@minecraft/server-ui >=2.2.0` peers. Trace's optional peers remain optional.
 
 ## Validation
 
-- TypeScript check and all package builds: PASS.
-- Unit/headless suite: 205 tests across 31 files, PASS.
-- Tree-shaking probes: 6/6 PASS.
-- Fixed-argument npm publishing dry-run: all five packages PASS; no upload.
-- Five local tarballs: required files and Observatory web assets present.
-- Clean consumer install from all five tarballs: PASS with install scripts and peer auto-install disabled.
-- Installed Observatory CLI help and Node-only Trace/spec imports: PASS.
-- README language switching, logo asset and local documentation links checked.
-
-Local toolchain: Node 26.9.0, npm 12.0.2, Vitest 5.0.1. The repository CI is configured for Node 24; that CI run was not executed during this preparation.
-
-## Before announcement
-
-- Verify all npm package names, ownership and the selected version before publication.
-- Commit a reviewed dependency lockfile and rerun the candidate gates with it.
-- Fill in the supported Minecraft build and actual in-game results: startup, transitions, shutdown, reconnect and cleanup.
-- Validate client /connect and BDS server-net separately. Neither transport was exercised against a live game during this preparation.
-- Complete clean-consumer behavior-pack bundling and peer-dependency checks on the chosen Minecraft toolchain.
-
-See the [release guide](./releasing.md) for publication order, direct latest publication and partial-failure handling. Detailed gameplay tutorials remain primarily in Chinese.
+- `npm ci --ignore-scripts`: PASS (Node 26.9.0, npm 12.2.0).
+- `npm run build`: PASS; all five package builds completed.
+- Trace/Observatory targeted tests: PASS, 51 tests across 6 files.
+- `npx vitest run --exclude tests/observatory-daemon.test.mjs`: PASS, 232 tests across 33 files. Full `npm test` on Windows: 239/242 passed; the three failures are in `observatory-daemon.test.mjs`, which assumes POSIX path resolution and hits detached-process cleanup `EPERM`. Run the full suite in Ubuntu CI before release.
+- `npm run test:treeshake`: PASS, 6/6 probes.
+- `npm run release:check`: PASS, all five 0.1.1 tarballs validated in npm dry-run; no upload.
+- `npm run pack`: PASS, five local tarballs created.
+- Minecraft client and BDS target-runtime checks: NOT RUN.

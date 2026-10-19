@@ -1,6 +1,6 @@
 {
     "name": "@begame/observatory",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "BEGame trace analysis workspace and service",
     "type": "module",
     "main": "./dist/server.js",
@@ -18,7 +18,7 @@
         "start": "node dist/cli.js"
     },
     "dependencies": {
-        "@begame/trace": "0.1.0",
+        "@begame/trace": "0.1.1",
         "@hono/node-server": "^2.1.1",
         "hono": "^4.13.7"
     },
@@ -30,6 +30,10 @@
         "type": "git",
         "url": "git+https://github.com/XiaoYangx666/BEGame.git",
         "directory": "packages/observatory"
+    },
+    "homepage": "https://github.com/XiaoYangx666/BEGame#readme",
+    "bugs": {
+        "url": "https://github.com/XiaoYangx666/BEGame/issues"
     },
     "keywords": [
         "minecraft",

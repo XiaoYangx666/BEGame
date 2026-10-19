@@ -19,12 +19,12 @@ The publish script derives and sorts the dependency graph automatically. Install
 ## Prepare the candidate
 
 - Review the working tree, including changes already present before release preparation. Select the intended changes explicitly.
-- Choose an unused stable version. Publish all five packages directly with the latest tag after validation; the planned initial version is 0.1.0, subject to registry availability.
+- Choose an unused stable version. For this candidate, all five packages are synchronized at 0.1.1; 0.1.0 is already published. Publish all five packages directly with the latest tag after validation.
 - Check package ownership, repository links, MIT licenses and npm publishing access.
 - Record the supported Minecraft build, Script API module versions and Node version used for validation.
 - Write release notes describing public behavior, migration steps and evidence limits.
 
-The current manifests declare 0.1.0. This guide does not establish whether that version is already published. Check the registry before choosing the final number.
+The current manifests declare 0.1.1. Check the registry immediately before publication; published name/version pairs cannot be overwritten.
 
 ## Local gates
 
@@ -39,7 +39,7 @@ npm run release:check
 npm run pack
 ```
 
-The lockfile is not tracked in this repository at present. Until a reviewed lockfile is committed, use npm install instead of npm ci and record the resolved tool versions. Committing a lockfile is recommended before the final release candidate so CI and local builds resolve the same dependency graph.
+The root npm lockfile is tracked. Use `npm ci` for release validation so CI and local builds resolve the same dependency graph; include lockfile changes whenever workspace versions or exact sibling references change.
 
 The build checks TypeScript and builds all five packages, including Observatory. The publish script checks advertised entry points and publishes in dependency order. release:check and release:stable pass their flags directly to the publisher, avoiding shell argument-forwarding differences. Dry-run does not upload packages and does not prove account permissions or consumer runtime behavior.
 
@@ -57,19 +57,34 @@ Use a clean consumer project, not workspace aliases:
 
 Node lifecycle tests do not establish rendering, actual chunk behavior, multiplayer client behavior or BDS transport acceptance. Mark each target-runtime result PASS, FAIL or NOT VERIFIED in the release notes.
 
+## GitHub Trusted Publishing
+
+The tag-triggered workflow is `.github/workflows/publish.yml`. Before the first release, configure a GitHub Actions Trusted Publisher separately on each of these npm package settings:
+
+- `@begame/trace-spec`
+- `@begame/core`
+- `@begame/trace`
+- `@begame/observatory`
+- `@begame/test`
+
+For every package use owner `XiaoYangx666`, repository `BEGame`, and workflow filename `publish.yml` (filename only, not the `.github/workflows/` path). Do not set an environment name; the workflow does not use a GitHub environment. Permit direct `npm publish` for the publisher. The workflow uses Node 24, npm 11.18.0, `https://registry.npmjs.org`, and GitHub OIDC (`id-token: write`); it requires no `NPM_TOKEN` or `NODE_AUTH_TOKEN` secret.
+
+The workflow accepts `v*` tags, checks that the tag, root manifest, five package manifests, exact internal references, and lockfile agree, then runs the Ubuntu release gates before `npm run release:stable`. The existing Verify workflow is also Ubuntu-based; push the reviewed candidate commit to `master` and wait for its Verify run before creating the release tag. The tag workflow repeats the release gates on the tagged commit, so publication stops if they fail.
+
 ## Publish
 
-After the candidate has passed its gates and publication is authorized:
+After review and successful verification:
 
-1. Commit the reviewed source, documentation and synchronized versions.
-2. Publish the synchronized stable package set directly to latest:
+1. Commit and push the reviewed source, docs, lockfile and synchronized versions (or merge them to `master`); wait for the Ubuntu Verify workflow to pass.
+2. Create and push the matching annotated version tag. For this candidate:
 
 ```sh
-npm run release:stable
+git tag -a v0.1.1 -m "BEGame 0.1.1"
+git push origin v0.1.1
 ```
 
-3. Install from the registry in a clean consumer and repeat the installation/CLI smoke checks.
-4. Create the matching Git tag and GitHub release with the compatibility matrix and migration notes.
+3. The tag-triggered `publish.yml` workflow verifies versions, reruns build/test/package gates, and publishes the five packages to npm's `latest` tag in dependency order.
+4. Install from the registry in a clean consumer and repeat the installation/CLI smoke checks; then create the GitHub release with the compatibility matrix and migration notes.
 
 
 npm publication is sequential, not atomic. If a package fails, record which packages succeeded and inspect registry state before retrying. Already published name/version pairs cannot be overwritten. Do not rerun the whole script blindly after a partial publication; publish only missing packages in dependency order, or prepare a new synchronized version.

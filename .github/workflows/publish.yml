@@ -1,0 +1,97 @@
+name: Publish to npm
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Install npm 11.18.0
+        run: npm install --global npm@11.18.0
+      - run: npm ci --ignore-scripts
+      - name: Verify tag, package versions, and internal references
+        shell: bash
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { readFileSync, readdirSync } from 'node:fs';
+
+          const version = process.env.GITHUB_REF_NAME?.replace(/^v/, '');
+          if (!version || !/^\d+\.\d+\.\d+$/.test(version)) {
+            throw new Error(`Expected a v<major>.<minor>.<patch> tag, got ${process.env.GITHUB_REF_NAME}`);
+          }
+
+          const expected = new Map([
+            ['@begame/trace-spec', 'packages/trace-spec'],
+            ['@begame/core', 'packages/core'],
+            ['@begame/trace', 'packages/trace'],
+            ['@begame/observatory', 'packages/observatory'],
+            ['@begame/test', 'packages/test'],
+          ]);
+          const readJson = (path) => JSON.parse(readFileSync(path, 'utf8'));
+          const root = readJson('package.json');
+          const lock = readJson('package-lock.json');
+          if (root.version !== version) {
+            throw new Error(`Tag v${version} does not match root package version ${root.version}`);
+          }
+          if (lock.packages['']?.version !== version) {
+            throw new Error(`Tag v${version} does not match lockfile root version ${lock.packages['']?.version}`);
+          }
+
+          const publishable = new Map();
+          for (const dir of readdirSync('packages', { withFileTypes: true })) {
+            if (!dir.isDirectory()) continue;
+            const path = `${dir.name}/package.json`;
+            try {
+              const manifest = readJson(`packages/${path}`);
+              if (manifest.private !== true) publishable.set(manifest.name, path);
+            } catch (error) {
+              if (error.code !== 'ENOENT') throw error;
+            }
+          }
+          if (publishable.size !== expected.size || [...expected.keys()].some((name) => !publishable.has(name))) {
+            throw new Error(`Expected exactly ${[...expected.keys()].join(', ')}; found ${[...publishable.keys()].join(', ')}`);
+          }
+
+          for (const [name, dir] of expected) {
+            const manifest = readJson(`${dir}/package.json`);
+            const lockEntry = lock.packages[dir];
+            if (manifest.name !== name || manifest.version !== version) {
+              throw new Error(`${dir}/package.json must declare ${name}@${version}; found ${manifest.name}@${manifest.version}`);
+            }
+            if (lockEntry?.version !== version) {
+              throw new Error(`Lockfile entry ${dir} must be version ${version}; found ${lockEntry?.version}`);
+            }
+            for (const field of ['dependencies', 'optionalDependencies', 'peerDependencies', 'devDependencies']) {
+              for (const [dependency, range] of Object.entries(manifest[field] ?? {})) {
+                if (dependency.startsWith('@begame/') && (!expected.has(dependency) || range !== version)) {
+                  throw new Error(`${name} has invalid ${field} reference ${dependency}@${range}`);
+                }
+              }
+            }
+          }
+
+          console.log(`Tag v${version} matches the root and all five @begame package manifests and lockfile.`);
+          NODE
+      - run: npm run build
+      - run: npm test
+      - run: npm run test:treeshake
+      - run: npm run release:check
+      - run: npm run pack
+      - name: Publish all five packages with npm Trusted Publishing
+        run: npm run release:stable

@@ -23,8 +23,8 @@ jobs:
         with:
           node-version: 24
           cache: npm
-          cache-dependency-path: package.json
-      - run: npm install --ignore-scripts
+          cache-dependency-path: package-lock.json
+      - run: npm ci --ignore-scripts
       - run: npm run build
       - run: npm run test:unit
       # Bundles one-symbol consumers to prove unused components and unused trace

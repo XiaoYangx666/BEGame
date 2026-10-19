@@ -1,6 +1,6 @@
 {
     "name": "@begame/trace-spec",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "BEGame Trace vocabulary: event ids, value and schema types, error marker",
     "type": "module",
     "main": "./dist/index.js",
@@ -25,6 +25,10 @@
         "type": "git",
         "url": "git+https://github.com/XiaoYangx666/BEGame.git",
         "directory": "packages/trace-spec"
+    },
+    "homepage": "https://github.com/XiaoYangx666/BEGame#readme",
+    "bugs": {
+        "url": "https://github.com/XiaoYangx666/BEGame/issues"
     },
     "keywords": ["minecraft", "bedrock", "trace", "spec"]
 }

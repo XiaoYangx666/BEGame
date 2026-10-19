@@ -1,6 +1,6 @@
 {
     "name": "@begame/core",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "Minecraft Bedrock game lifecycle framework",
     "type": "module",
     "main": "./dist/main.js",
@@ -66,7 +66,7 @@
         }
     },
     "dependencies": {
-        "@begame/trace-spec": "0.1.0"
+        "@begame/trace-spec": "0.1.1"
     },
     "peerDependencies": {
         "@minecraft/server": ">=2.10.0",
@@ -80,6 +80,10 @@
         "type": "git",
         "url": "git+https://github.com/XiaoYangx666/BEGame.git",
         "directory": "packages/core"
+    },
+    "homepage": "https://github.com/XiaoYangx666/BEGame#readme",
+    "bugs": {
+        "url": "https://github.com/XiaoYangx666/BEGame/issues"
     },
     "keywords": ["minecraft", "bedrock", "scriptapi", "minigame", "game-framework"]
 }

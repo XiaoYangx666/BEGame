@@ -1,6 +1,6 @@
 {
     "name": "@begame/trace",
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "BEGame Trace: codec, session manager and history store, plus the Minecraft binding",
     "type": "module",
     "main": "./dist/index.js",
@@ -26,10 +26,10 @@
         }
     },
     "dependencies": {
-        "@begame/trace-spec": "0.1.0"
+        "@begame/trace-spec": "0.1.1"
     },
     "peerDependencies": {
-        "@begame/core": "0.1.0",
+        "@begame/core": "0.1.1",
         "@minecraft/server": ">=2.10.0",
         "@minecraft/server-net": "*"
     },
@@ -52,6 +52,10 @@
         "type": "git",
         "url": "git+https://github.com/XiaoYangx666/BEGame.git",
         "directory": "packages/trace"
+    },
+    "homepage": "https://github.com/XiaoYangx666/BEGame#readme",
+    "bugs": {
+        "url": "https://github.com/XiaoYangx666/BEGame/issues"
     },
     "keywords": ["minecraft", "bedrock", "trace", "runtime"]
 }

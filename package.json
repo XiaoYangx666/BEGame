@@ -1,7 +1,7 @@
 {
     "name": "begame-monorepo",
     "private": true,
-    "version": "0.1.0",
+    "version": "0.1.1",
     "description": "BEGame - Minecraft Bedrock game lifecycle framework",
     "type": "module",
     "workspaces": [
