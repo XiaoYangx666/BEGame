@@ -1,4 +1,8 @@
+import { system } from "@minecraft/server";
 import { GameContext } from "./gameContext";
+import { PlayerGroup } from "./gamePlayer/playerGroup";
+import { PlayerGroupSet } from "./gamePlayer/groupSet";
+import type { Subscription } from "./gameEvent/subscription";
 import { GamePlayer } from "./gamePlayer/gamePlayer";
 import { GamePlayerManager } from "./gamePlayer/playerManager";
 import {
@@ -9,6 +13,7 @@ import {
 import {
     GameParticipation,
     ParticipationManager,
+    type ParticipationChange,
 } from "./participation/participationManager";
 import {
     BuiltinTraceEventType,
@@ -59,6 +64,9 @@ export abstract class GameEngine<
     public readonly trace: TraceScope;
     public readonly key: string;
     private _lifecycle: GameLifecycleState = "created";
+    private membershipSubscription?: Subscription;
+    private readonly participantGroups = new Set<PlayerGroup<P> | PlayerGroupSet<P>>();
+    private readonly pendingParticipantLeaves = new Map<string, ParticipationChange>();
 
     /**是否是常驻游戏（常驻游戏不会被game end结束) */
     get isDaemon() {
@@ -119,6 +127,46 @@ export abstract class GameEngine<
     }
 
     protected abstract buildContext(config: O): C;
+
+    /**
+     * Explicitly bind groups whose members must leave when Participation is released.
+     * Do not bind waiting-room or spectator groups unless they share that ownership.
+     */
+    protected bindParticipantGroups(...groups: (PlayerGroup<P> | PlayerGroupSet<P>)[]): void {
+        for (const group of groups) this.participantGroups.add(group);
+    }
+
+    /** Runs after managed group cleanup, in a writable tick. */
+    protected onParticipantLeft(_event: ParticipationChange): void {}
+
+    private queueParticipantLeave(event: ParticipationChange): void {
+        if (event.type !== "left") return;
+        // Membership and GamePlayer.isActive are invalidated synchronously by
+        // ParticipationManager / GamePlayerManager. Group.changed listeners may
+        // touch the native API, so group mutations must run outside before-events.
+        const first = !this.pendingParticipantLeaves.has(event.playerId);
+        this.pendingParticipantLeaves.set(event.playerId, event);
+        if (!first) return;
+        system.run(() => {
+            const latest = this.pendingParticipantLeaves.get(event.playerId);
+            this.pendingParticipantLeaves.delete(event.playerId);
+            if (!latest || !this.isActive || this.participation.has(event.playerId)) return;
+            for (const group of this.participantGroups) {
+                if (group instanceof PlayerGroupSet) {
+                    const member = group.findById(event.playerId)?.player;
+                    if (member) group.removePlayer(member, "participation-left");
+                } else {
+                    const member = group.getById(event.playerId);
+                    if (member) group.delete(member, "participation-left");
+                }
+            }
+            try {
+                this.onParticipantLeft(latest);
+            } catch (error) {
+                this.logger.error("Participant leave handler failed", error);
+            }
+        });
+    }
 
     /**游戏开始 */
     protected abstract onStart(): void;
@@ -395,6 +443,9 @@ export abstract class GameEngine<
             );
         }
         this._lifecycle = "starting";
+        this.membershipSubscription = this.participation.changed.subscribe((event) =>
+            this.queueParticipantLeave(event)
+        );
         this.onStart();
         if (this._lifecycle === "starting") {
             this._lifecycle = "running";
@@ -416,6 +467,9 @@ export abstract class GameEngine<
         if (this._lifecycle !== "stopping") this._lifecycle = "stopping";
 
         const errors: unknown[] = [];
+        this.membershipSubscription?.unsubscribe();
+        this.membershipSubscription = undefined;
+        this.pendingParticipantLeaves.clear();
         try {
             this.clearStateStack("game-dispose");
         } catch (err) {
