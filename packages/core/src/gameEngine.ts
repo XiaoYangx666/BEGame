@@ -65,6 +65,7 @@ export abstract class GameEngine<
     public readonly key: string;
     private _lifecycle: GameLifecycleState = "created";
     private membershipSubscription?: Subscription;
+    private readonly managedSubscriptions = new Set<Subscription>();
     private readonly participantGroups = new Set<PlayerGroup<P> | PlayerGroupSet<P>>();
     private readonly pendingParticipantLeaves = new Map<string, ParticipationChange>();
 
@@ -127,6 +128,12 @@ export abstract class GameEngine<
     }
 
     protected abstract buildContext(config: O): C;
+
+    /** Keep a game-level subscription alive across states and release it on any dispose path. */
+    protected trackSubscription(subscription: Subscription): Subscription {
+        this.managedSubscriptions.add(subscription);
+        return subscription;
+    }
 
     /**
      * Explicitly bind groups whose members must leave when Participation is released.
@@ -470,6 +477,14 @@ export abstract class GameEngine<
         this.membershipSubscription?.unsubscribe();
         this.membershipSubscription = undefined;
         this.pendingParticipantLeaves.clear();
+        for (const subscription of this.managedSubscriptions) {
+            try {
+                subscription.unsubscribe();
+            } catch (error) {
+                errors.push(error);
+            }
+        }
+        this.managedSubscriptions.clear();
         try {
             this.clearStateStack("game-dispose");
         } catch (err) {
