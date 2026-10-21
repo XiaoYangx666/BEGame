@@ -77,6 +77,35 @@ class ManagedMembershipGame extends TraceGame {
     }
 }
 
+class ThrowingGroup extends PlayerGroup {
+    delete() { throw new Error("group-delete-failed"); }
+}
+
+class PartiallyFailingMembershipGame extends TraceGame {
+    static gameType = "test-failing-membership";
+    onStart() {
+        super.onStart();
+        const player = this.playerManager.get(this.context.initialPlayer);
+        this.context.groups = [
+            new ThrowingGroup(TracePlayer, [player]),
+            new PlayerGroup(TracePlayer, [player]),
+        ];
+        this.bindParticipantGroups(...this.context.groups);
+    }
+    onParticipantLeft(event) {
+        this.context.trace.push(`left:${event.playerId}:${event.reason}`);
+    }
+}
+
+class UnboundMembershipGame extends TraceGame {
+    static gameType = "test-unbound-membership";
+    onStart() {
+        super.onStart();
+        const player = this.playerManager.get(this.context.initialPlayer);
+        this.context.groups = [new PlayerGroup(TracePlayer, [player])];
+    }
+}
+
 class DisconnectRootState extends GameState {
     onEnter() {
         this.context.trace.push("disconnect-root:enter");
@@ -427,6 +456,45 @@ test("game-owned participant groups are cleaned after leave, without restricted-
         env.manager.disposeAll();
         await env.advanceTicks(1);
         expect(trace.filter(x => x === "left:alice:leave-all")).toHaveLength(0);
+    } finally {
+        env.reset();
+    }
+});
+
+test("a failing bound group does not skip the remaining cleanup or the leave callback", async () => {
+    const env = new BEGameTestEngine();
+    env.reset();
+    try {
+        const alice = env.connectPlayer("alice", "Alice");
+        const trace = [];
+        const game = env.startGame(PartiallyFailingMembershipGame, { trace, initialPlayer: alice });
+        const [broken, healthy] = game.context.groups;
+
+        game.playerManager.leave("alice", "hub");
+        await env.advanceTicks(1);
+
+        expect(broken.size).toBe(1);
+        expect(healthy.size).toBe(0);
+        expect(trace).toContain("left:alice:hub");
+    } finally {
+        env.reset();
+    }
+});
+
+test("game-owned cleanup only touches explicitly bound groups", async () => {
+    const env = new BEGameTestEngine();
+    env.reset();
+    try {
+        const alice = env.connectPlayer("alice", "Alice");
+        const trace = [];
+        const game = env.startGame(UnboundMembershipGame, { trace, initialPlayer: alice });
+        const [group] = game.context.groups;
+
+        game.playerManager.leave("alice", "hub");
+        await env.advanceTicks(1);
+
+        // 战桥 / 跑酷等仍由自己的 leave 订阅处理；未显式绑定的组不能被公共层重复清理。
+        expect(group.size).toBe(1);
     } finally {
         env.reset();
     }

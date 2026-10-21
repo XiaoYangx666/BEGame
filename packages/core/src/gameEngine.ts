@@ -159,12 +159,17 @@ export abstract class GameEngine<
             this.pendingParticipantLeaves.delete(event.playerId);
             if (!latest || !this.isActive || this.participation.has(event.playerId)) return;
             for (const group of this.participantGroups) {
-                if (group instanceof PlayerGroupSet) {
-                    const member = group.findById(event.playerId)?.player;
-                    if (member) group.removePlayer(member, "participation-left");
-                } else {
-                    const member = group.getById(event.playerId);
-                    if (member) group.delete(member, "participation-left");
+                // One failing group must not leave the remaining bound groups dirty.
+                try {
+                    if (group instanceof PlayerGroupSet) {
+                        const member = group.findById(event.playerId)?.player;
+                        if (member) group.removePlayer(member, "participation-left");
+                    } else {
+                        const member = group.getById(event.playerId);
+                        if (member) group.delete(member, "participation-left");
+                    }
+                } catch (error) {
+                    this.logger.error("Participant group cleanup failed", error);
                 }
             }
             try {
@@ -476,6 +481,8 @@ export abstract class GameEngine<
         const errors: unknown[] = [];
         this.membershipSubscription?.unsubscribe();
         this.membershipSubscription = undefined;
+        // Queued cleanups belong to the live instance. Disposal drops the bound
+        // groups with the Game anyway, so they must not run after this point.
         this.pendingParticipantLeaves.clear();
         for (const subscription of this.managedSubscriptions) {
             try {
